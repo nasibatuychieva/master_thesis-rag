@@ -1,17 +1,20 @@
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.datamodel.pipeline_options import PdfPipelineOptions, TesseractCliOcrOptions
 from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
 from transformers import AutoTokenizer
 from pathlib import Path
 from docling.chunking import HybridChunker
 
 def convert_documents_into_docling_doc(pdf_path: Path):
-    pdf_options = PdfPipelineOptions()
-    pdf_options.do_ocr = False                    # No OCR - pure text extraction only   # noqa: E501
-    pdf_options.generate_page_images = False      # No page images  # noqa: E501
-    pdf_options.generate_picture_images = False   # Ignore pictures completely  # noqa: E501
-    pdf_options.generate_table_images = False     # Keep tables as text/markdown, not images  # noqa: E501
+    ocr_opts = TesseractCliOcrOptions(lang=["eng"])  # OCR nur Englisch
+
+    pdf_options = PdfPipelineOptions(
+        do_ocr=True,              # OCR aktivieren
+        force_full_page_ocr=True, # für alle Seiten erzwingen
+        generate_page_images=False,
+        generate_table_images=False,
+    )
 
         # Configure format options
     format_options = {
