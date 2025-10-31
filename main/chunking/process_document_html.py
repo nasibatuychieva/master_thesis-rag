@@ -7,9 +7,11 @@ import importlib
 import docling_chunker_functions
 from pathlib import Path
 import json
+import prepare_html_functions 
 importlib.reload(docling_chunker_functions)
-
+importlib.reload(prepare_html_functions)
 from docling_chunker_functions import convert_documents_into_docling_doc, chunk_documents_with_docling, return_tokenizer
+from prepare_html_functions import build_docling_from_html
 
 def get_repo_root(
     start_path: Optional[Path] = None,
@@ -51,6 +53,9 @@ def process_pdf(pdf_path: Path, out_dir: Path, doc, chunker, tokenizer):
     element = None
     if parts and parts[0] == "Elements":
         element = "_".join(parts[:2])
+    tutorial = None
+    if parts and parts[0] == "Tutorial":
+        tutorial = "_".join(parts[:2])
     
     out_path = out_dir / category / "docling_chunks.jsonl"
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -88,9 +93,11 @@ def process_pdf(pdf_path: Path, out_dir: Path, doc, chunker, tokenizer):
             "chunk_size": n_tokens,
             "chunk_type": "contextualized",
             "product": product,
+            "element": element,
+            "tutorial": tutorial,
             "section": section,
             "semantic_density": semantic_density,
-            "text": f"[Product: {product}] [Category: {category}] [Element of {product}: {element}]\n\n{context}",
+            "text": f"[Product: {product}] [Category: {category}] [Element of {product}: {element}] [Tutorial: {tutorial}] \n\n{context}",
             "total_chunks": total_chunks,
         }
         records.append(rec)
@@ -118,7 +125,7 @@ def iterate_product_docs(
     # load tokenizer
     tokenizer = tokenizer or return_tokenizer()
 
-    for pdf_path in doc_root.rglob("*.pdf"):
+    for pdf_path in doc_root.rglob("*.html"):
         # ensure pdf_path is a file
         if not pdf_path.is_file():
             continue
@@ -127,7 +134,7 @@ def iterate_product_docs(
         print(f"Start writing into {pdf_path.parent.parent.name} / {pdf_path.parent.name} / {pdf_path.name}")
         
         #generate for each file doc 
-        doc = convert_documents_into_docling_doc(pdf_path)
+        doc = build_docling_from_html(pdf_path)
         chunker_for_doc = chunk_documents_with_docling(doc, tokenizer) if chunker is None else chunker
 
         process_pdf(pdf_path, out_dir, doc, chunker_for_doc, tokenizer)
