@@ -1,0 +1,31 @@
+script,question_id,question,answer
+GraphRAG_KG_Query,36,which products belong to Product Category Mega?,"Category 'Mega' has 4 product(s):
+- Giga R1 Wifi
+- Mega 2560 Rev3
+- Giga Display Shield
+- Due"
+GraphRAG_Vector_Query,23,What is the main processor used on the Arduino Due?,"The Arduino Due uses the Atmel SAM3X8E microcontroller, which is based on a 32-bit ARM Cortex-M3 CPU."
+GraphRAG_Vector_Query,,What does 'digital inputs not 5-V compatible' mean for the Arduino Due?,"The phrase 'digital inputs not 5-V compatible' for the Arduino Due means that the digital input pins on the Arduino Due board cannot handle a 5-volt signal. This is important to consider when connecting other devices to the Arduino Due, as applying a 5-volt signal to its digital inputs could potentially damage the board. The Due operates at lower voltage levels, typically 3.3 volts, so any external signals or devices interfacing with the digital inputs need to be compatible with this lower voltage."
+GraphRAG_Vector_Query,,Create for me summary about all products for product Category Mega,"The product category ""Mega"" includes the product ""Due,"" which is associated with several entities and features. Key features of the ""Due"" include:
+
+1. **Ports and Connectivity**: It is equipped with a USB port, using an Atmega16U2 chip for communication, and supports both native USB ports with a USB Type-B connector. It also has USB host/device capabilities, including USB OTG (On-The-Go) functionality.
+
+2. **Software Compatibility**: The ""Due"" is compatible with the Arduino IDE, allowing it to connect to PCs via a COM port.
+
+3. **Regulatory Compliance**: It has considerations under FCC rules, indicating that there are specific compliance guidelines to follow when using the device, typically related to electromagnetic interference.
+
+The ""Due"" seems to be a versatile board intended for complex projects, reflecting the typical attributes of products within the ""Mega"" category, which likely emphasizes advanced features, expandability, and software integration capabilities."
+GraphRAG_Vector_Query,,How is the resolution of TFT display from GIGA Display Shield?,The resolution of the TFT display from the GIGA Display Shield is 480 x 800 pixels.
+GraphRAG_Vector_Query,,To which product category does the product Due belong?,"The product Due belongs to the product category ""Mega."""
+GraphRAG_Vector_Query,,which products belong to Product Category Mega?,The product that belongs to the Product Category Mega is the Mega 2560 Rev3.
+GraphRAG_Vector_Query,,Which microcontroller does the GIGA R1 WiFi product use?,"The GIGA R1 WiFi product uses the dual-core STM32H747 microcontroller, which includes an Arm® Cortex®-M7 core running at 480 MHz and an Arm® Cortex®-M4 core running at 240 MHz."
+GraphRAG_Vector_Query,,which products belong to Product Category Mega?,The product that belongs to the Product Category Mega is the Mega 2560 Rev3.
+GraphRAG_Vector_Query,,which products belong to Product Category Mega?,The product that belongs to the Product Category Mega is the Mega 2560 Rev3.
+GraphRAG_Vector_Query,,which products belong to Product Category Mega?,"The products that belong to the Product Category Mega are:
+- Arduino Due
+- Due
+- GIGA Display Shield
+- Mega 2560 Rev3
+- GIGA R1 WiFi"
+GraphRAG_Vector_Query,,What distingushes Due from GIGA R1 WiFi?,"The GIGA R1 WiFi is distinguished from the Due by its more advanced features, including a dual-core STM32H747XIH6 microcontroller, which consists of a 32-bit Arm® Cortex®-M7 core and a Cortex®-M4 core, providing higher processing capabilities. Additionally, the GIGA R1 WiFi includes integrated Wi-Fi® and Bluetooth® connectivity through the Murata® LBEE5KL1DX-883 module, supports a greater number of digital and analog pins, and has more memory options (2 MB Flash, 1 MB RAM, and 16 MB NOR Flash) compared to the Due. The GIGA R1 WiFi also features USB-C® connectivity and a secure element module, enhancing its functionality for complex applications."
+GraphRAG_Vector_Query,,which microcontrollers are used by more than 2 products in category Mega?,"The microcontroller used by more than 2 products in the category Mega is the Atmel SAM3X8E, which is utilized in the Arduino Due and other products in the Mega category."

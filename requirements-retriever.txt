@@ -1,0 +1,26 @@
+langchain==1.0.7
+langchain-core==1.0.5
+langchain-community==0.4.1
+langchain-experimental==0.4.0
+langchain-neo4j==0.6.0
+langgraph==1.0.3
+pydantic==2.12.4
+pandas==2.3.3
+llama_cpp_python==0.3.16
+python-dotenv>=1.0.0,<2
+sentence-transformers==5.1.2
+langchain-graph-retriever==0.8.0
+# ---- LlamaIndex Pakete (mit konservativem Pinning) ----
+llama-index-core==0.14.8
+llama-index-llms-llama-cpp==0.5.1
+llama-index-embeddings-huggingface==0.6.1
+llama-index-graph-stores-neo4j==0.5.1
+llama-index-llms-openai
+ollama
+openai==0.26.5
+langchain-openai==1.1.0
+graphdatascience
+seaborn
+matplotlib
+
+

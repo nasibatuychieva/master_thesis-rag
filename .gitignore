@@ -1,0 +1,26 @@
+# Python-Umgebungen (deine beiden venvs)
+.venv/
+.venv_Python11/
+.venv_Python11_New/
+.retriever311/
+venv/
+env/
+
+# Python-Caches
+__pycache__/
+*.py[cod]
+
+# Neo4j DB-Daten (nicht versionieren!)
+main/ressources/knowledge_graph/neo4j/neo4j/data/
+main/ressources/knowledge_graph/neo4j/neo4j/logs/
+main/ressources/knowledge_graph/neo4j/neo4j/databases/
+
+# Build-/Package-Artefakte
+*.egg-info/
+main/ressources/knowledge_graph/neo4j/neo4j/logs/debug.log
+main/ressources/knowledge_graph/neo4j/neo4j/logs/neo4j.log
+main/ressources/knowledge_graph/
+*.env
+.env
+.venv
+__pycache__/

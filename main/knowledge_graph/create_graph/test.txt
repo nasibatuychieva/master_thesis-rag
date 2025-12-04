@@ -1,0 +1,3 @@
+The Arduino Uno contains an ATmega328P microcontroller. 
+It has a USB interface and supports digital and analog input pins.
+The Uno is often used together with sensors and motors for robotics projects.

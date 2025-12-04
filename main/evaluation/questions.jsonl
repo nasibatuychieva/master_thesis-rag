@@ -1,0 +1,2 @@
+{"id": 23, "query_type": "factual", "question": "What is the main processor used on the Arduino Due?", "gold_answer": "The Arduino Due uses the Atmel SAM3X8E ARM Cortex-M3 microcontroller running at 84 MHz."}
+{"id": 36, "query_type": "relational", "question": "which products belong to Product Category Mega?", "gold_answer": "Products Due, Giga R1 Wifi, Giga Display Shield, Mega 2560 Rev3 belong to the product category Mega "}

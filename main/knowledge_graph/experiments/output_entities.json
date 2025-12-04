@@ -1,0 +1,12 @@
+[
+  {
+    "head": "Portenta Breakout",
+    "type": "belongs_to_category",
+    "tail": "Portenta Family"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "part of the series",
+    "tail": "Portenta"
+  }
+]

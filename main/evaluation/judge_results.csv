@@ -1,0 +1,1 @@
+script,question_id,query_type,question,gold_answer,candidate_answer,semantic_similarity,correctness,relevance,completeness,factual_accuracy,hallucination,reasoning_correctness,reasoning_depth,uses_relational_or_kg_evidence,comments

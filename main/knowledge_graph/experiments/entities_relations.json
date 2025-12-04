@@ -1,0 +1,2017 @@
+[
+  {
+    "head": "Portenta Breakout",
+    "type": "subclass of",
+    "tail": "Arduino"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "subclass of",
+    "tail": "Arduino"
+  },
+  {
+    "head": "RJ45",
+    "type": "subclass of",
+    "tail": "Ethernet"
+  },
+  {
+    "head": "COVID-19 pandemic",
+    "type": "point in time",
+    "tail": "2020"
+  },
+  {
+    "head": "Portenta",
+    "type": "has part",
+    "tail": "Portenta Breakout"
+  },
+  {
+    "head": "Portenta",
+    "type": "has part",
+    "tail": "Portenta Breakout"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "part of the series",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "part of the series",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "part of the series",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "part of the series",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "5V",
+    "type": "instance of",
+    "tail": "voltage"
+  },
+  {
+    "head": "5V",
+    "type": "instance of",
+    "tail": "voltage"
+  },
+  {
+    "head": "5V",
+    "type": "instance of",
+    "tail": "voltage"
+  },
+  {
+    "head": "5V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "5V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "5V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "Portenta",
+    "type": "product or material produced",
+    "tail": "Micro SD card"
+  },
+  {
+    "head": "Portenta",
+    "type": "product or material produced",
+    "tail": "Micro SD card"
+  },
+  {
+    "head": "USB-A",
+    "type": "different from",
+    "tail": "USB-C"
+  },
+  {
+    "head": "USB-C",
+    "type": "different from",
+    "tail": "USB-A"
+  },
+  {
+    "head": "3 RJ-45 Connector",
+    "type": "connects with",
+    "tail": "RJ-45 Connector"
+  },
+  {
+    "head": "RJ-45 Connector",
+    "type": "connects with",
+    "tail": "3 RJ-45 Connector"
+  },
+  {
+    "head": "Arduino Desktop IDE",
+    "type": "instance of",
+    "tail": "IDE"
+  },
+  {
+    "head": "Arduino Cloud Editor",
+    "type": "platform",
+    "tail": "Arduino"
+  },
+  {
+    "head": "Arduino Cloud Editor",
+    "type": "platform",
+    "tail": "Arduino"
+  },
+  {
+    "head": "Arduino Cloud",
+    "type": "platform",
+    "tail": "Arduino"
+  },
+  {
+    "head": "Arduino",
+    "type": "instance of",
+    "tail": "IDE"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "part of the series",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta",
+    "type": "has part",
+    "tail": "Portenta Breakout"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "instance of",
+    "tail": "connector"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "instance of",
+    "tail": "connector"
+  },
+  {
+    "head": "GPIO",
+    "type": "subclass of",
+    "tail": "Digital"
+  },
+  {
+    "head": "GPIO",
+    "type": "subclass of",
+    "tail": "Digital"
+  },
+  {
+    "head": "GPIO",
+    "type": "subclass of",
+    "tail": "Digital"
+  },
+  {
+    "head": "Serial Data Line 1",
+    "type": "followed by",
+    "tail": "Serial Data Line 2"
+  },
+  {
+    "head": "Serial Data Line 2",
+    "type": "follows",
+    "tail": "Serial Data Line 1"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "has part",
+    "tail": "CAN0"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "has part",
+    "tail": "CAN1"
+  },
+  {
+    "head": "CAN0",
+    "type": "part of",
+    "tail": "Portenta Breakout"
+  },
+  {
+    "head": "CAN1",
+    "type": "part of",
+    "tail": "Portenta Breakout"
+  },
+  {
+    "head": "PWMoutput",
+    "type": "subclass of",
+    "tail": "Digital"
+  },
+  {
+    "head": "PWMoutput",
+    "type": "subclass of",
+    "tail": "Digital"
+  },
+  {
+    "head": "PWMoutput",
+    "type": "subclass of",
+    "tail": "Digital"
+  },
+  {
+    "head": "Differential DSI Data Line",
+    "type": "subclass of",
+    "tail": "Differential"
+  },
+  {
+    "head": "Differential DSI Data Line",
+    "type": "subclass of",
+    "tail": "Differential"
+  },
+  {
+    "head": "6 UART1/UART0",
+    "type": "follows",
+    "tail": "UART1"
+  },
+  {
+    "head": "UART1",
+    "type": "followed by",
+    "tail": "6 UART1/UART0"
+  },
+  {
+    "head": "7 SPI1/SPI0",
+    "type": "has part",
+    "tail": "SPI1"
+  },
+  {
+    "head": "SPI1",
+    "type": "part of",
+    "tail": "7 SPI1/SPI0"
+  },
+  {
+    "head": "Transmission Line Negative",
+    "type": "part of",
+    "tail": "PCIe"
+  },
+  {
+    "head": "UART2",
+    "type": "followed by",
+    "tail": "UART3"
+  },
+  {
+    "head": "I2S/SAI1",
+    "type": "has part",
+    "tail": "SAI Data Line"
+  },
+  {
+    "head": "I2S/SAI1",
+    "type": "has part",
+    "tail": "SAI Data Line"
+  },
+  {
+    "head": "SAI Data Line",
+    "type": "part of",
+    "tail": "I2S/SAI1"
+  },
+  {
+    "head": "SAI Data Line",
+    "type": "part of",
+    "tail": "I2S/SAI1"
+  },
+  {
+    "head": "DCMI",
+    "type": "instance of",
+    "tail": "Digital"
+  },
+  {
+    "head": "DCMI",
+    "type": "instance of",
+    "tail": "Digital"
+  },
+  {
+    "head": "DCMI",
+    "type": "instance of",
+    "tail": "Digital"
+  },
+  {
+    "head": "DCMI",
+    "type": "instance of",
+    "tail": "Digital"
+  },
+  {
+    "head": "DCMI",
+    "type": "instance of",
+    "tail": "Digital"
+  },
+  {
+    "head": "DCMI",
+    "type": "instance of",
+    "tail": "Digital"
+  },
+  {
+    "head": "DCMI",
+    "type": "instance of",
+    "tail": "Digital"
+  },
+  {
+    "head": "DCMI",
+    "type": "instance of",
+    "tail": "Digital"
+  },
+  {
+    "head": "DCMI",
+    "type": "instance of",
+    "tail": "Digital"
+  },
+  {
+    "head": "DCMI",
+    "type": "instance of",
+    "tail": "Digital"
+  },
+  {
+    "head": "DCMI",
+    "type": "instance of",
+    "tail": "Digital"
+  },
+  {
+    "head": "DCMI",
+    "type": "instance of",
+    "tail": "Digital"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "part of",
+    "tail": "PDM/SPDIF"
+  },
+  {
+    "head": "PDM/SPDIF",
+    "type": "has part",
+    "tail": "Portenta Breakout"
+  },
+  {
+    "head": "PDM/SPDIF",
+    "type": "has part",
+    "tail": "Transmission Signal"
+  },
+  {
+    "head": "PDM/SPDIF",
+    "type": "has part",
+    "tail": "RX"
+  },
+  {
+    "head": "Transmission Signal",
+    "type": "part of",
+    "tail": "PDM/SPDIF"
+  },
+  {
+    "head": "RX",
+    "type": "part of",
+    "tail": "PDM/SPDIF"
+  },
+  {
+    "head": "NCP383",
+    "type": "instance of",
+    "tail": "VIN"
+  },
+  {
+    "head": "European Union",
+    "type": "member of",
+    "tail": "European Economic Area"
+  },
+  {
+    "head": "European Economic Area",
+    "type": "has part",
+    "tail": "European Union"
+  },
+  {
+    "head": "RoHS 2 Directive",
+    "type": "legislated by",
+    "tail": "European Parliament"
+  },
+  {
+    "head": "RoHS 3 Directive",
+    "type": "legislated by",
+    "tail": "European Parliament"
+  },
+  {
+    "head": "tin",
+    "type": "subclass of",
+    "tail": "Conflict Minerals"
+  },
+  {
+    "head": "Tantalum",
+    "type": "subclass of",
+    "tail": "Conflict Minerals"
+  },
+  {
+    "head": "Tungsten",
+    "type": "subclass of",
+    "tail": "Conflict Minerals"
+  },
+  {
+    "head": "Gold",
+    "type": "subclass of",
+    "tail": "Conflict Minerals"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta Breakout",
+    "type": "connects with",
+    "tail": "RJ-45"
+  },
+  {
+    "head": "Portenta",
+    "type": "connects with",
+    "tail": "RJ-45"
+  },
+  {
+    "head": "RJ-45",
+    "type": "connects with",
+    "tail": "Portenta Breakout"
+  },
+  {
+    "head": "RJ-45",
+    "type": "connects with",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta",
+    "type": "product or material produced",
+    "tail": "Portenta H7"
+  },
+  {
+    "head": "Portenta",
+    "type": "product or material produced",
+    "tail": "Portenta H7"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "has part",
+    "tail": "SDRAM"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "has part",
+    "tail": "QSPI"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "has part",
+    "tail": "SDRAM"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "has part",
+    "tail": "QSPI"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "has part",
+    "tail": "SDRAM"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "has part",
+    "tail": "QSPI"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "has part",
+    "tail": "SDRAM"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "has part",
+    "tail": "QSPI"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "has part",
+    "tail": "SDRAM"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "has part",
+    "tail": "QSPI"
+  },
+  {
+    "head": "ST STM32H747XI Processor",
+    "type": "has part",
+    "tail": "Arm® Cortex®-M7"
+  },
+  {
+    "head": "ST STM32H747XI Processor",
+    "type": "has part",
+    "tail": "Arm® Cortex®-M7"
+  },
+  {
+    "head": "ST STM32H747XI Processor",
+    "type": "has part",
+    "tail": "Arm® Cortex®-M7"
+  },
+  {
+    "head": "ST STM32H747XI Processor",
+    "type": "has part",
+    "tail": "Arm® Cortex®-M7"
+  },
+  {
+    "head": "ST STM32H747XI Processor",
+    "type": "has part",
+    "tail": "Arm® Cortex®-M7"
+  },
+  {
+    "head": "CAN FD",
+    "type": "subclass of",
+    "tail": "CAN"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "USB-C",
+    "type": "has part",
+    "tail": "DisplayPort"
+  },
+  {
+    "head": "USB-C",
+    "type": "has part",
+    "tail": "DisplayPort"
+  },
+  {
+    "head": "USB-C",
+    "type": "has part",
+    "tail": "DisplayPort"
+  },
+  {
+    "head": "USB-C",
+    "type": "has part",
+    "tail": "DisplayPort"
+  },
+  {
+    "head": "USB-C",
+    "type": "has part",
+    "tail": "DisplayPort"
+  },
+  {
+    "head": "DisplayPort",
+    "type": "part of",
+    "tail": "USB-C"
+  },
+  {
+    "head": "DisplayPort",
+    "type": "part of",
+    "tail": "USB-C"
+  },
+  {
+    "head": "DisplayPort",
+    "type": "part of",
+    "tail": "USB-C"
+  },
+  {
+    "head": "DisplayPort",
+    "type": "part of",
+    "tail": "USB-C"
+  },
+  {
+    "head": "DisplayPort",
+    "type": "part of",
+    "tail": "USB-C"
+  },
+  {
+    "head": "DisplayPort",
+    "type": "part of",
+    "tail": "USB-C"
+  },
+  {
+    "head": "DisplayPort",
+    "type": "part of",
+    "tail": "USB-"
+  },
+  {
+    "head": "I2C",
+    "type": "subclass of",
+    "tail": "MIPI"
+  },
+  {
+    "head": "AES-128",
+    "type": "subclass of",
+    "tail": "elliptic curve"
+  },
+  {
+    "head": "SE050C2 Secure element",
+    "type": "instance of",
+    "tail": "Secure Element"
+  },
+  {
+    "head": "SE050C2 Secure element",
+    "type": "instance of",
+    "tail": "Secure Element"
+  },
+  {
+    "head": "SE050C2 Secure element",
+    "type": "instance of",
+    "tail": "Secure Element"
+  },
+  {
+    "head": "SE050C2 Secure element",
+    "type": "instance of",
+    "tail": "Secure Element"
+  },
+  {
+    "head": "SE050C2 Secure element",
+    "type": "instance of",
+    "tail": "Secure Element"
+  },
+  {
+    "head": "MKR compatible header",
+    "type": "uses",
+    "tail": "PWM"
+  },
+  {
+    "head": "MKR compatible header",
+    "type": "uses",
+    "tail": "UART"
+  },
+  {
+    "head": "MKR compatible header",
+    "type": "uses",
+    "tail": "PWM"
+  },
+  {
+    "head": "MKR compatible header",
+    "type": "uses",
+    "tail": "UART"
+  },
+  {
+    "head": "MKR compatible header",
+    "type": "uses",
+    "tail": "PWM"
+  },
+  {
+    "head": "MKR compatible header",
+    "type": "uses",
+    "tail": "UART"
+  },
+  {
+    "head": "MKR compatible header",
+    "type": "uses",
+    "tail": "PWM"
+  },
+  {
+    "head": "MKR compatible header",
+    "type": "uses",
+    "tail": "UART"
+  },
+  {
+    "head": "MKR compatible header",
+    "type": "uses",
+    "tail": "PWM"
+  },
+  {
+    "head": "MKR compatible header",
+    "type": "uses",
+    "tail": "UART"
+  },
+  {
+    "head": "MKR compatible header",
+    "type": "uses",
+    "tail": "PWM"
+  },
+  {
+    "head": "MKR compatible header",
+    "type": "uses",
+    "tail": "UART"
+  },
+  {
+    "head": "NXP PF1550 Programmable PMIC",
+    "type": "use",
+    "tail": "Programmable I/O voltage"
+  },
+  {
+    "head": "NXP PF1550 Programmable PMIC",
+    "type": "use",
+    "tail": "Programmable I/O voltage"
+  },
+  {
+    "head": "NXP PF1550 Programmable PMIC",
+    "type": "use",
+    "tail": "Programmable I/O voltage"
+  },
+  {
+    "head": "NXP PF1550 Programmable PMIC",
+    "type": "use",
+    "tail": "Programmable I/O voltage"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta",
+    "type": "product or material produced",
+    "tail": "Portenta H7"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "USB",
+    "type": "has part",
+    "tail": "Pin"
+  },
+  {
+    "head": "USB",
+    "type": "has part",
+    "tail": "Pin"
+  },
+  {
+    "head": "Pin",
+    "type": "part of",
+    "tail": "USB"
+  },
+  {
+    "head": "Pin",
+    "type": "has part",
+    "tail": "Pin"
+  },
+  {
+    "head": "Pin",
+    "type": "has part",
+    "tail": "Pin"
+  },
+  {
+    "head": "Pin",
+    "type": "part of",
+    "tail": "USB"
+  },
+  {
+    "head": "Pin",
+    "type": "part of",
+    "tail": "USB"
+  },
+  {
+    "head": "Pin",
+    "type": "part of",
+    "tail": "USB"
+  },
+  {
+    "head": "Pin",
+    "type": "part of",
+    "tail": "USB"
+  },
+  {
+    "head": "USB",
+    "type": "has part",
+    "tail": "Pin"
+  },
+  {
+    "head": "USB",
+    "type": "has part",
+    "tail": "Pin"
+  },
+  {
+    "head": "USB",
+    "type": "has part",
+    "tail": "Pin"
+  },
+  {
+    "head": "Pins on HD",
+    "type": "part of",
+    "tail": "I2C"
+  },
+  {
+    "head": "Pins on HD",
+    "type": "part of",
+    "tail": "I2C"
+  },
+  {
+    "head": "Pins on HD",
+    "type": "part of",
+    "tail": "I2C"
+  },
+  {
+    "head": "Pins on HD",
+    "type": "part of",
+    "tail": "I2C"
+  },
+  {
+    "head": "Pins on HD",
+    "type": "part of",
+    "tail": "I2C"
+  },
+  {
+    "head": "Pins on HD",
+    "type": "part of",
+    "tail": "I2C"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "instance of",
+    "tail": "form factor"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "manufacturer",
+    "tail": "NXP"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "manufacturer",
+    "tail": "NXP"
+  },
+  {
+    "head": "MIL-HDBK-217F",
+    "type": "has part",
+    "tail": "MIL-HDBK-217F, Environmental Conditions = 25 ºC"
+  },
+  {
+    "head": "MIL-HDBK-217F, Environmental Conditions = 25 ºC",
+    "type": "part of",
+    "tail": "MIL-HDBK-217F"
+  },
+  {
+    "head": "EN 301489-17",
+    "type": "followed by",
+    "tail": "EN 62368-1"
+  },
+  {
+    "head": "EN 301489-17",
+    "type": "followed by",
+    "tail": "EN 62368-1"
+  },
+  {
+    "head": "EN 62368-1",
+    "type": "follows",
+    "tail": "EN 301489-17"
+  },
+  {
+    "head": "EN 62368-1",
+    "type": "followed by",
+    "tail": "EN 62368-1"
+  },
+  {
+    "head": "EN 62368-1",
+    "type": "follows",
+    "tail": "EN 301489-17"
+  },
+  {
+    "head": "EN 62368-1",
+    "type": "follows",
+    "tail": "EN 62368-1"
+  },
+  {
+    "head": "European Union",
+    "type": "member of",
+    "tail": "European Economic Area"
+  },
+  {
+    "head": "European Economic Area",
+    "type": "has part",
+    "tail": "European Union"
+  },
+  {
+    "head": "RoHS 2 Directive",
+    "type": "legislated by",
+    "tail": "European Parliament"
+  },
+  {
+    "head": "RoHS 3 Directive",
+    "type": "legislated by",
+    "tail": "European Parliament"
+  },
+  {
+    "head": "tin",
+    "type": "subclass of",
+    "tail": "Conflict Minerals"
+  },
+  {
+    "head": "Tantalum",
+    "type": "subclass of",
+    "tail": "Conflict Minerals"
+  },
+  {
+    "head": "Tungsten",
+    "type": "subclass of",
+    "tail": "Conflict Minerals"
+  },
+  {
+    "head": "Gold",
+    "type": "subclass of",
+    "tail": "Conflict Minerals"
+  },
+  {
+    "head": "part 15",
+    "type": "part of",
+    "tail": "FCC Rules"
+  },
+  {
+    "head": "FCC Rules",
+    "type": "has part",
+    "tail": "part 15"
+  },
+  {
+    "head": "Portenta H7",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta",
+    "type": "product or material produced",
+    "tail": "Portenta H7"
+  },
+  {
+    "head": "Directive 2014/53/EU",
+    "type": "applies to jurisdiction",
+    "tail": "EU"
+  },
+  {
+    "head": "4G",
+    "type": "follows",
+    "tail": "2G"
+  },
+  {
+    "head": "4G",
+    "type": "follows",
+    "tail": "3G"
+  },
+  {
+    "head": "2G",
+    "type": "followed by",
+    "tail": "4G"
+  },
+  {
+    "head": "2G",
+    "type": "followed by",
+    "tail": "3G"
+  },
+  {
+    "head": "3G",
+    "type": "followed by",
+    "tail": "4G"
+  },
+  {
+    "head": "3G",
+    "type": "follows",
+    "tail": "2G"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "use",
+    "tail": "IoT"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "use",
+    "tail": "IoT"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "use",
+    "tail": "IoT"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "use",
+    "tail": "IoT"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "use",
+    "tail": "IoT"
+  },
+  {
+    "head": "Portenta X8",
+    "type": "part of the series",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta X8",
+    "type": "part of the series",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Portenta X8",
+    "type": "part of the series",
+    "tail": "Portenta"
+  },
+  {
+    "head": "GSM850",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "EGSM900",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "PCS1900",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "GSM",
+    "type": "has part",
+    "tail": "HSDPA"
+  },
+  {
+    "head": "GSM",
+    "type": "has part",
+    "tail": "HSUPA"
+  },
+  {
+    "head": "HSDPA",
+    "type": "part of",
+    "tail": "GSM"
+  },
+  {
+    "head": "HSUPA",
+    "type": "part of",
+    "tail": "GSM"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "DI",
+    "type": "subclass of",
+    "tail": "I/O"
+  },
+  {
+    "head": "DIO",
+    "type": "subclass of",
+    "tail": "I/O"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "has part",
+    "tail": "Pro 4G Module"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "has part",
+    "tail": "Pro 4G Module"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "part of",
+    "tail": "Pro 4G Module"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "part of",
+    "tail": "Pro 4G Module"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "part of",
+    "tail": "Pro 4G Module"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "part of",
+    "tail": "Pro 4G Module"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "uses",
+    "tail": "PCI Express"
+  },
+  {
+    "head": "PCI Express",
+    "type": "used by",
+    "tail": "Pro 4G Module"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "has part",
+    "tail": "Pro 4G Module Mini PCIe"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "has part",
+    "tail": "Pro 4G Module Mini PCIe"
+  },
+  {
+    "head": "Pro 4G Module Mini PCIe",
+    "type": "part of",
+    "tail": "Pro 4G Module"
+  },
+  {
+    "head": "Pro 4G Module Mini PCIe",
+    "type": "part of",
+    "tail": "Pro 4G Module"
+  },
+  {
+    "head": "3V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "3V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "3V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "3V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "3V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "3V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "3V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "3V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "3V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "3V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "3V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "3V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "3V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "3V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "3V",
+    "type": "subclass of",
+    "tail": "V"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "part of",
+    "tail": "PCI Express"
+  },
+  {
+    "head": "PCI Express",
+    "type": "has part",
+    "tail": "Pro 4G Module"
+  },
+  {
+    "head": "GLONASS",
+    "type": "instance of",
+    "tail": "global navigation satellite system"
+  },
+  {
+    "head": "BeiDou",
+    "type": "instance of",
+    "tail": "global navigation satellite system"
+  },
+  {
+    "head": "Galileo",
+    "type": "instance of",
+    "tail": "global navigation satellite system"
+  },
+  {
+    "head": "GNSS Performance and Frequency",
+    "type": "facet of",
+    "tail": "GNSS"
+  },
+  {
+    "head": "VCC",
+    "type": "has part",
+    "tail": "VIL"
+  },
+  {
+    "head": "VCC",
+    "type": "has part",
+    "tail": "VOH"
+  },
+  {
+    "head": "VCC",
+    "type": "has part",
+    "tail": "VCC"
+  },
+  {
+    "head": "VCC",
+    "type": "has part",
+    "tail": "VCC"
+  },
+  {
+    "head": "VCC",
+    "type": "has part",
+    "tail": "VIL"
+  },
+  {
+    "head": "VCC",
+    "type": "has part",
+    "tail": "VOH"
+  },
+  {
+    "head": "VCC",
+    "type": "has part",
+    "tail": "VCC"
+  },
+  {
+    "head": "VCC",
+    "type": "has part",
+    "tail": "VCC"
+  },
+  {
+    "head": "VCC",
+    "type": "has part",
+    "tail": "VIL"
+  },
+  {
+    "head": "VCC",
+    "type": "has part",
+    "tail": "VOH"
+  },
+  {
+    "head": "VCC",
+    "type": "has part",
+    "tail": "VCC"
+  },
+  {
+    "head": "VCC",
+    "type": "has part",
+    "tail": "VCC"
+  },
+  {
+    "head": "VCC",
+    "type": "has part",
+    "tail": "VIL"
+  },
+  {
+    "head": "VCC",
+    "type": "has",
+    "tail": "VOH"
+  },
+  {
+    "head": "B1/B2/B4/B5/B8",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "B1/B2/B4/B5/B8",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "WCDMA B1",
+    "type": "followed by",
+    "tail": "WCDMA B5"
+  },
+  {
+    "head": "WCDMA B5",
+    "type": "follows",
+    "tail": "WCDMA B1"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10 MHz"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10 MHz"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10 MHz"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10 MHz"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "GSM850/EGSM900 (8-PSK)",
+    "type": "has part",
+    "tail": "GSM850/EGSM900 (8-PSK)"
+  },
+  {
+    "head": "GSM850/EGSM900 (8-PSK)",
+    "type": "part of",
+    "tail": "GSM850/EGSM900 (8-PSK)"
+  },
+  {
+    "head": "WCDMA B2",
+    "type": "part of",
+    "tail": "3GPP"
+  },
+  {
+    "head": "WCDMA B2",
+    "type": "part of",
+    "tail": "3GPP"
+  },
+  {
+    "head": "WCDMA B2",
+    "type": "part of",
+    "tail": "3GPP"
+  },
+  {
+    "head": "WCDMA B2",
+    "type": "part of",
+    "tail": "3GPP"
+  },
+  {
+    "head": "WCDMA B5",
+    "type": "part of",
+    "tail": "3GPP"
+  },
+  {
+    "head": "WCDMA B5",
+    "type": "part of",
+    "tail": "3GPP"
+  },
+  {
+    "head": "WCDMA B5",
+    "type": "part of",
+    "tail": "3GPP"
+  },
+  {
+    "head": "WCDMA B5",
+    "type": "part of",
+    "tail": "3GPP"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "10 MHz",
+    "type": "number of participants",
+    "tail": "10"
+  },
+  {
+    "head": "Pro 4G Module",
+    "type": "manufacturer",
+    "tail": "Portenta"
+  },
+  {
+    "head": "4 Power Consumption",
+    "type": "area",
+    "tail": "4"
+  },
+  {
+    "head": "4 Power Consumption",
+    "type": "area",
+    "tail": "4"
+  },
+  {
+    "head": "4 Power Consumption",
+    "type": "area",
+    "tail": "4"
+  },
+  {
+    "head": "4 Power Consumption",
+    "type": "area",
+    "tail": "4"
+  },
+  {
+    "head": "2DL/3UL",
+    "type": "follows",
+    "tail": "3DL/2UL"
+  },
+  {
+    "head": "3DL/2UL",
+    "type": "followed by",
+    "tail": "2DL/3UL"
+  },
+  {
+    "head": "WCDMA B1 HSDPA",
+    "type": "followed by",
+    "tail": "WCDMA B8 HSDPA"
+  },
+  {
+    "head": "WCDMA B8 HSDPA",
+    "type": "follows",
+    "tail": "WCDMA B1 HSDPA"
+  },
+  {
+    "head": "B40",
+    "type": "subclass of",
+    "tail": "LTE-TDD"
+  },
+  {
+    "head": "DCS1800",
+    "type": "subclass of",
+    "tail": "DRX"
+  },
+  {
+    "head": "DCS1800",
+    "type": "subclass of",
+    "tail": "DRX"
+  },
+  {
+    "head": "DCS1800",
+    "type": "subclass of",
+    "tail": "DRX"
+  },
+  {
+    "head": "DCS1800",
+    "type": "subclass of",
+    "tail": "DRX"
+  },
+  {
+    "head": "DCS1800",
+    "type": "subclass of",
+    "tail": "DRX"
+  },
+  {
+    "head": "DCS1800",
+    "type": "subclass of",
+    "tail": "DRX"
+  },
+  {
+    "head": "DCS1800",
+    "type": "subclass of",
+    "tail": "DRX"
+  },
+  {
+    "head": "DCS1800",
+    "type": "subclass of",
+    "tail": "DRX"
+  },
+  {
+    "head": "GSM850",
+    "type": "has part",
+    "tail": "GSM850 2UL/3DL"
+  },
+  {
+    "head": "GSM850 2UL/3DL",
+    "type": "part of",
+    "tail": "GSM850"
+  },
+  {
+    "head": "GSM",
+    "type": "product or material produced",
+    "tail": "EDGE"
+  },
+  {
+    "head": "EDGE",
+    "type": "developer",
+    "tail": "GSM"
+  },
+  {
+    "head": "EDGE",
+    "type": "developer",
+    "tail": "GSM"
+  },
+  {
+    "head": "EDGE",
+    "type": "developer",
+    "tail": "GSM"
+  },
+  {
+    "head": "GSM",
+    "type": "product or material produced",
+    "tail": "EDGE"
+  },
+  {
+    "head": "GSM",
+    "type": "product or material produced",
+    "tail": "EDGE"
+  },
+  {
+    "head": "GSM",
+    "type": "product or material produced",
+    "tail": "EDGE"
+  },
+  {
+    "head": "GSM",
+    "type": "product or material produced",
+    "tail": "EDGE"
+  },
+  {
+    "head": "WCDMA B2 HSDPA",
+    "type": "followed by",
+    "tail": "WCDMA B8 HSDPA"
+  },
+  {
+    "head": "WCDMA B8 HSDPA",
+    "type": "follows",
+    "tail": "WCDMA B2 HSDPA"
+  },
+  {
+    "head": "WCDMA B1 HSUPA",
+    "type": "followed by",
+    "tail": "WCDMA B2 HSUPA"
+  },
+  {
+    "head": "WCDMA B2 HSUPA",
+    "type": "follows",
+    "tail": "WCDMA B1 HSUPA"
+  },
+  {
+    "head": "WCDMA B6 HSUPA",
+    "type": "point in time",
+    "tail": "22"
+  },
+  {
+    "head": "WCDMA B6 HSUPA",
+    "type": "point in time",
+    "tail": "22"
+  },
+  {
+    "head": "B4",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "B4",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "B4",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "B5",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "B5",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "B5",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "B5",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "B41",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "B41",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "B41",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "B41",
+    "type": "subclass of",
+    "tail": "WCDMA"
+  },
+  {
+    "head": "main antenna connector",
+    "type": "subclass of",
+    "tail": "antenna connector"
+  },
+  {
+    "head": "Rx-diversity antenna connector",
+    "type": "subclass of",
+    "tail": "antenna connector"
+  },
+  {
+    "head": "GNSS antenna connector",
+    "type": "subclass of",
+    "tail": "antenna connector"
+  },
+  {
+    "head": "GSM850",
+    "type": "instance of",
+    "tail": "MHz"
+  },
+  {
+    "head": "GSM850",
+    "type": "instance of",
+    "tail": "MHz"
+  },
+  {
+    "head": "GSM850",
+    "type": "instance of",
+    "tail": "MHz"
+  },
+  {
+    "head": "MHz",
+    "type": "subclass of",
+    "tail": "Units"
+  },
+  {
+    "head": "MHz",
+    "type": "subclass of",
+    "tail": "MHz"
+  },
+  {
+    "head": "MHz",
+    "type": "subclass of",
+    "tail": "MHz"
+  },
+  {
+    "head": "Units",
+    "type": "subclass of",
+    "tail": "Units"
+  },
+  {
+    "head": "Units",
+    "type": "subclass of",
+    "tail": "MHz"
+  },
+  {
+    "head": "Units",
+    "type": "subclass of",
+    "tail": "MHz"
+  },
+  {
+    "head": "MHz",
+    "type": "has parts of the class",
+    "tail": "Units"
+  },
+  {
+    "head": "MHz",
+    "type": "has parts of the class",
+    "tail": "Units"
+  },
+  {
+    "head": "MHz",
+    "type": "has parts of the class",
+    "tail": "MHz"
+  },
+  {
+    "head": "Units",
+    "type": "has parts of the class",
+    "tail": "Units"
+  },
+  {
+    "head": "Units",
+    "type": "has parts",
+    "tail": "Units"
+  },
+  {
+    "head": "Transmit",
+    "type": "has part",
+    "tail": "Receive"
+  },
+  {
+    "head": "Receive",
+    "type": "part of",
+    "tail": "Transmit"
+  },
+  {
+    "head": "Receive",
+    "type": "part of",
+    "tail": "Transmit"
+  },
+  {
+    "head": "Transmit",
+    "type": "has part",
+    "tail": "Receive"
+  },
+  {
+    "head": "Transmit",
+    "type": "has part",
+    "tail": "Receive"
+  },
+  {
+    "head": "Receive",
+    "type": "has part",
+    "tail": "Transmit"
+  },
+  {
+    "head": "Receive",
+    "type": "has part",
+    "tail": "Transmit"
+  },
+  {
+    "head": "Transmit",
+    "type": "has part",
+    "tail": "Receive"
+  },
+  {
+    "head": "Transmit",
+    "type": "has part",
+    "tail": "Receive"
+  },
+  {
+    "head": "LTE-FDD B1",
+    "type": "instance of",
+    "tail": "MHz"
+  },
+  {
+    "head": "LTE-FDD B1",
+    "type": "instance of",
+    "tail": "MHz"
+  },
+  {
+    "head": "LTE-FDD B1",
+    "type": "instance of",
+    "tail": "MHz"
+  },
+  {
+    "head": "LTE-FDD B2",
+    "type": "instance of",
+    "tail": "MHz"
+  },
+  {
+    "head": "LTE-FDD B3",
+    "type": "instance of",
+    "tail": "MHz"
+  },
+  {
+    "head": "LTE-FDD B4",
+    "type": "instance of",
+    "tail": "MHz"
+  },
+  {
+    "head": "LTE-FDD B5",
+    "type": "instance of",
+    "tail": "MHz"
+  },
+  {
+    "head": "LTE-FDD B6",
+    "type": "instance of",
+    "tail": "MHz"
+  }
+]
