@@ -40,10 +40,10 @@ from neo4j_graphrag.generation.prompts import ERExtractionTemplate
 retrieval_query = """
 WITH node, score
 
-// lokale Produkte an diesem Chunk
-OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(p0:Product)
+// lokale Produkte an diesem Chunk (MENTIONS in beliebiger Richtung)
+OPTIONAL MATCH (node)-[:MENTIONS]-(p0:Product)
 
-// Kategorien dieser Produkte
+// Kategorien dieser Produkte (Property "category" auf Product)
 WITH node, score,
      collect(DISTINCT p0) AS local_products,
      collect(DISTINCT p0.category) AS cats
@@ -57,9 +57,9 @@ OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e:__Entity__)
 // alles wieder einsammeln (und local_products im Scope behalten!)
 WITH node, score,
      local_products,
-     collect(DISTINCT cat)      AS categories,
-     collect(DISTINCT p_all)    AS products_in_category,
-     collect(DISTINCT e)        AS entities
+     collect(DISTINCT cat)    AS categories,
+     collect(DISTINCT p_all) AS products_in_category,
+     collect(DISTINCT e)     AS entities
 
 RETURN DISTINCT
   node.text AS text,
@@ -68,6 +68,7 @@ RETURN DISTINCT
   [p IN products_in_category | p.name] AS products_in_category,
   [p IN local_products        | p.name] AS local_products,
   [en IN entities             | en.name] AS entities
+
 
 """
 

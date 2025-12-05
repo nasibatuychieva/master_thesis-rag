@@ -21,7 +21,9 @@ llm = OpenAI(model="gpt-4o-mini", temperature=0)
 BASE_DIR = Path(
     r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\out_aktuell"
 )
-
+# BASE_DIR = Path(
+#     r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\triples"
+# )
 documents = []
 for jsonl_path in BASE_DIR.rglob("*.jsonl"):
     with open(jsonl_path, "r", encoding="utf-8") as f:
@@ -51,8 +53,9 @@ kg_extractor = SimpleLLMPathExtractor(
 # Neo4j-GraphStore
 username = "neo4j"
 password = "master2025"
+#password = "testmaster123"
 uri = "neo4j://127.0.0.1:7687"
-database = "llmakg"
+database = "llmakg"   
 
 graph_store = Neo4jPGStore(
     username=username,

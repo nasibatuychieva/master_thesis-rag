@@ -20,12 +20,16 @@ load_dotenv(find_dotenv())
 
 URI = "neo4j://127.0.0.1:7687"
 AUTH_USER = "neo4j"
-AUTH_PASSWORD = "master2025"
+AUTH_PASSWORD = "testmaster123"
+#DATABASE = "eval-simlekg"
 DATABASE = "simplekg"
 
 BASE_DIR = Path(
     r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\out_aktuell"
 )
+# BASE_DIR = Path(
+#     r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\triples"
+# )
 
 # Neo4j-Driver (DB wird über ENV oder default gewählt)
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))

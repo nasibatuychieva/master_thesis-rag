@@ -1,31 +1,118 @@
 script,question_id,question,answer
-GraphRAG_KG_Query,36,which products belong to Product Category Mega?,"Category 'Mega' has 4 product(s):
-- Giga R1 Wifi
-- Mega 2560 Rev3
-- Giga Display Shield
-- Due"
-GraphRAG_Vector_Query,23,What is the main processor used on the Arduino Due?,"The Arduino Due uses the Atmel SAM3X8E microcontroller, which is based on a 32-bit ARM Cortex-M3 CPU."
-GraphRAG_Vector_Query,,What does 'digital inputs not 5-V compatible' mean for the Arduino Due?,"The phrase 'digital inputs not 5-V compatible' for the Arduino Due means that the digital input pins on the Arduino Due board cannot handle a 5-volt signal. This is important to consider when connecting other devices to the Arduino Due, as applying a 5-volt signal to its digital inputs could potentially damage the board. The Due operates at lower voltage levels, typically 3.3 volts, so any external signals or devices interfacing with the digital inputs need to be compatible with this lower voltage."
-GraphRAG_Vector_Query,,Create for me summary about all products for product Category Mega,"The product category ""Mega"" includes the product ""Due,"" which is associated with several entities and features. Key features of the ""Due"" include:
+SimpleKGPipeline_Retriever,,How do the Arduino Due and Mega 2560 Rev3 differ in processor architecture?,"The Arduino Due features a 32-bit ARM Cortex-M3 processor (Atmel SAM3X8E) that operates at a clock speed of 84 MHz, providing enhanced processing capabilities compared to traditional Arduino boards. In contrast, the Mega 2560 Rev3 is powered by the 8-bit ATmega2560 processor, which operates at a frequency of 16 MHz. This difference in architecture means that the Due is better suited for complex projects requiring higher performance, while the Mega 2560 Rev3 is designed for applications that need a larger number of input/output pins and moderate processing power."
+KG_PGRetriever_Synonym_Vector,,How do the Arduino Due and Mega 2560 Rev3 differ in processor architecture?,"The Arduino Due is based on the Atmel SAM3X8E microcontroller, which is an ARM Cortex-M3 architecture, while the Mega 2560 Rev3 is based on the ATmega2560 microcontroller, which uses an AVR architecture. This fundamental difference in processor architecture affects their performance, capabilities, and the types of applications they are suited for."
+KG_PGRetriever_Synonym_Vector,,which products belong to Product Category Mega?,"The products that belong to the Product Category Mega are:
 
-1. **Ports and Connectivity**: It is equipped with a USB port, using an Atmega16U2 chip for communication, and supports both native USB ports with a USB Type-B connector. It also has USB host/device capabilities, including USB OTG (On-The-Go) functionality.
+1. Due
+2. GIGA R1 WiFi
+3. GIGA Display Shield
+4. Mega 2560 Rev3
+5. Giga r1"
+SimpleKGPipeline_Retriever,,Can a 5-volt sensor be connected directly to the Arduino Due? Explain.,"No, a 5-volt sensor cannot be connected directly to the Arduino Due. The Arduino Due operates at a supply voltage of 3.3 V, and its I/O pins can only tolerate a maximum voltage of 3.3 V. Applying a voltage higher than 3.3 V, such as 5 V from the sensor, could damage the board. Therefore, it is important to use level shifting or other methods to safely interface a 5-volt sensor with the Arduino Due."
+KG_PGRetriever_Synonym_Vector,,Can a 5-volt sensor be connected directly to the Arduino Due? Explain.,"No, a 5-volt sensor cannot be connected directly to the Arduino Due because the Arduino Due operates at 3.3 volts. Connecting a 5-volt sensor directly could damage the board. It is advisable to use a level shifter or a voltage divider to safely interface a 5-volt sensor with the Arduino Due."
+SimpleKGPipeline_Retriever,,What do both the Arduino Due and Mega 2560 Rev3 have in common regarding USB communication?,"Both the Arduino Due and Mega 2560 Rev3 feature USB connections that facilitate communication with a computer. The Arduino Due has a Native USB port that allows it to communicate directly as a USB device, while the Mega 2560 Rev3 uses a USB serial processor (ATmega16U2) to interface between USB input signals and its main ATmega2560 processor. This enables both boards to upload sketches and interact with the Arduino IDE for programming and debugging purposes."
+KG_PGRetriever_Synonym_Vector,,What do both the Arduino Due and Mega 2560 Rev3 have in common regarding USB communication?,"Both the Arduino Due and Mega 2560 Rev3 can connect to USB devices, allowing for communication with USB keyboards and mice. They both facilitate USB communication as part of their functionality."
+ONLY RAG,,How is the resolution of TFT display from GIGA Display Shield?,"The resolution of the TFT display on the GIGA Display Shield is 480 x 800 pixels. The display size is 3.97 inches diagonally, and the pixel size is 0.108 mm. This information corresponds to the KD040WVFID026-01-C025A display module used on the shield.
 
-2. **Software Compatibility**: The ""Due"" is compatible with the Arduino IDE, allowing it to connect to PCs via a COM port.
+If you need further details about color depth or refresh rate, that information is not provided in the available documentation.
 
-3. **Regulatory Compliance**: It has considerations under FCC rules, indicating that there are specific compliance guidelines to follow when using the device, typically related to electromagnetic interference.
+Sources:
+- GIGA Display Shield-datasheet.pdf
+- Tutorial_GIGA Display Shield_3D Engine.pdf
+- Tutorial_GIGA Display Shield_GFX Guide.pdf
+- Tutorial_GIGA Display Shield_Getting Started.pdf
+- Tutorial_GIGA Display Shield_Touch Interface.pdf"
+ONLY RAG,,which products belong to Product Category Mega?,"The products that belong to the Product Category ""Mega"" are:
 
-The ""Due"" seems to be a versatile board intended for complex projects, reflecting the typical attributes of products within the ""Mega"" category, which likely emphasizes advanced features, expandability, and software integration capabilities."
-GraphRAG_Vector_Query,,How is the resolution of TFT display from GIGA Display Shield?,The resolution of the TFT display from the GIGA Display Shield is 480 x 800 pixels.
-GraphRAG_Vector_Query,,To which product category does the product Due belong?,"The product Due belongs to the product category ""Mega."""
-GraphRAG_Vector_Query,,which products belong to Product Category Mega?,The product that belongs to the Product Category Mega is the Mega 2560 Rev3.
-GraphRAG_Vector_Query,,Which microcontroller does the GIGA R1 WiFi product use?,"The GIGA R1 WiFi product uses the dual-core STM32H747 microcontroller, which includes an Arm® Cortex®-M7 core running at 480 MHz and an Arm® Cortex®-M4 core running at 240 MHz."
-GraphRAG_Vector_Query,,which products belong to Product Category Mega?,The product that belongs to the Product Category Mega is the Mega 2560 Rev3.
-GraphRAG_Vector_Query,,which products belong to Product Category Mega?,The product that belongs to the Product Category Mega is the Mega 2560 Rev3.
-GraphRAG_Vector_Query,,which products belong to Product Category Mega?,"The products that belong to the Product Category Mega are:
-- Arduino Due
-- Due
-- GIGA Display Shield
-- Mega 2560 Rev3
-- GIGA R1 WiFi"
-GraphRAG_Vector_Query,,What distingushes Due from GIGA R1 WiFi?,"The GIGA R1 WiFi is distinguished from the Due by its more advanced features, including a dual-core STM32H747XIH6 microcontroller, which consists of a 32-bit Arm® Cortex®-M7 core and a Cortex®-M4 core, providing higher processing capabilities. Additionally, the GIGA R1 WiFi includes integrated Wi-Fi® and Bluetooth® connectivity through the Murata® LBEE5KL1DX-883 module, supports a greater number of digital and analog pins, and has more memory options (2 MB Flash, 1 MB RAM, and 16 MB NOR Flash) compared to the Due. The GIGA R1 WiFi also features USB-C® connectivity and a secure element module, enhancing its functionality for complex applications."
-GraphRAG_Vector_Query,,which microcontrollers are used by more than 2 products in category Mega?,"The microcontroller used by more than 2 products in the category Mega is the Atmel SAM3X8E, which is utilized in the Arduino Due and other products in the Mega category."
+1. **Mega 2560 Rev3**  
+   - Arduino® development board based on the ATmega2560 microcontroller running at 16 MHz.  
+   - Features:  
+     - 54 digital input/output pins  
+     - 16 analog inputs  
+     - 4 UART hardware serial ports  
+     - USB connection  
+     - Power jack  
+     - ICSP header  
+     - Reset button  
+   - Memory:  
+     - 256 KB flash memory (8 KB used by bootloader)  
+     - 4 KB EEPROM  
+     - 8 KB internal SRAM  
+   - Other hardware:  
+     - 32 × 8 general-purpose working registers  
+     - Real-time counter with separate oscillator  
+     - Four 8-bit PWM channels  
+     - Four programmable serial USART interfaces  
+
+2. **GIGA Display Shield**  
+   - Categorized under Mega, but no specific technical details are provided in the available documentation.
+
+3. **GIGA R1 WiFi**  
+   - Also under the Mega category, but no detailed technical specifications are available in the provided context.
+
+4. **Due**  
+   - Listed under the Mega category.  
+   - Holds multiple certifications including CE/RED (Europe), UKCA (UK), FCC (USA), IC (Canada), RCM (Australia), RoHS, REACH, and WEEE.  
+   - No further technical details are provided in the available documentation.
+
+All these Mega category products comply with essential EU Directives, enabling free movement within the EU and EEA markets.
+
+If you need more detailed technical specifications for the GIGA Display Shield, GIGA R1 WiFi, or Due, that information is not covered by the current documentation.
+
+Sources:
+- Due-datasheet.pdf
+- GIGA Display Shield-datasheet.pdf
+- GIGA R1 WiFi-datasheet.pdf
+- Mega 2560 Rev3-datasheet.pdf"
+ONLY RAG,,"""Can a 5-volt sensor be connected directly to the Arduino Due? Explain","No, a 5-volt sensor **cannot** be connected directly to the Arduino Due's I/O pins without proper level shifting or voltage protection.
+
+### Explanation:
+- The Arduino Due operates at **3.3 V logic levels**. This means all its digital and analog input pins expect signals within the 0 to 3.3 V range.
+- The Due's I/O pins are **not 5 V tolerant**. Applying voltages higher than 3.3 V to any I/O pin risks **permanent damage** to the microcontroller.
+- Since a 5 V sensor outputs signals at 5 V logic levels, connecting it directly to the Due's input pins would exceed the 3.3 V maximum rating.
+- The analog inputs on the Due also measure voltages only from 0 to 3.3 V. Feeding 5 V into an analog input pin can damage the ADC and the microcontroller.
+
+### Recommended approach:
+- Use a **level shifter** or a **voltage divider** circuit to step down the 5 V sensor output to 3.3 V before connecting it to the Due.
+- For digital signals, a simple resistor voltage divider or a dedicated level shifting IC can be used.
+- For analog signals, a resistor voltage divider is commonly used to scale the 0–5 V sensor output down to 0–3.3 V.
+
+### Additional notes:
+- The context does not specify particular level shifting methods or circuits, but the general principle of protecting the Due's 3.3 V inputs from 5 V signals is clear.
+- Powering the sensor from the Due's 5 V supply line is possible if the sensor requires 5 V power, but its output signals must still be level shifted before connecting to the Due's inputs.
+
+**In summary:** Direct connection of a 5 V sensor output to the Arduino Due's inputs is unsafe and not recommended. Proper voltage level translation is necessary to protect the board and ensure reliable operation.
+
+Sources:
+- Due-datasheet.pdf
+- Tutorial_Due_Mouse Controller.pdf"
+ONLY RAG,,How do the Arduino Due and Mega 2560 Rev3 differ in processor architecture?,"The Arduino Due and Arduino Mega 2560 Rev3 differ fundamentally in their processor architectures as follows:
+
+1. **Processor Core and Bit Width:**
+   - **Arduino Due:** Uses the Atmel SAM3X8E microcontroller, which is based on a 32-bit ARM Cortex-M3 CPU. This 32-bit architecture allows for more efficient processing of data and instructions, enabling more complex and faster computations.
+   - **Arduino Mega 2560 Rev3:** Uses the ATmega2560 microcontroller, which is an 8-bit AVR processor. The 8-bit architecture processes data in smaller chunks, which generally results in lower computational throughput compared to 32-bit processors.
+
+2. **Clock Speed:**
+   - **Due:** Runs at 84 MHz, providing significantly higher clock speed and thus faster instruction execution.
+   - **Mega 2560:** Runs at 16 MHz, which is slower and limits the speed of processing and peripheral handling.
+
+3. **Memory:**
+   - **Due:** Has 512 KB of flash memory for program storage and 96 KB of SRAM (split into 64 KB and 32 KB banks) for runtime data. This larger memory capacity supports more complex programs and data handling.
+   - **Mega 2560:** Has 256 KB of flash memory (with 8 KB reserved for the bootloader), 8 KB of SRAM, and 4 KB of EEPROM. The EEPROM allows for non-volatile data storage, which the Due lacks.
+
+4. **Peripheral and I/O Differences Related to Architecture:**
+   - The Due’s 32-bit architecture supports more advanced peripherals and interfaces, including 4 UARTs, 2 I2C buses, SPI, and native USB ports.
+   - The Mega 2560, with its 8-bit AVR core, supports 4 UARTs, SPI, and uses an additional ATmega16U2 chip for USB-to-serial communication.
+
+5. **Voltage Levels:**
+   - The Due operates at 3.3 V logic levels, which is typical for ARM Cortex-M microcontrollers.
+   - The Mega 2560 operates at 5 V logic levels, consistent with many traditional Arduino boards.
+
+**Summary:**  
+The Arduino Due’s 32-bit ARM Cortex-M3 processor running at 84 MHz offers higher processing power, larger memory, and more advanced peripheral support compared to the Arduino Mega 2560 Rev3’s 8-bit AVR processor running at 16 MHz. The Mega 2560 provides more EEPROM and analog inputs but at a lower processing speed and with an older 8-bit architecture.
+
+If you need details beyond processor architecture (e.g., power consumption, specific peripheral differences beyond what is mentioned), that information is not covered in the provided context.
+
+Sources:
+- Due-datasheet.pdf
+- Mega 2560 Rev3-datasheet.pdf"

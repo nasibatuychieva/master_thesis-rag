@@ -4,7 +4,7 @@ from typing import List, Dict
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.vectorstores import Neo4jVector
 from langchain_core.documents import Document
-
+from main.evaluation.logger import log_antwort  
 # -----------------------------
 # 1) Settings
 # -----------------------------
@@ -14,7 +14,7 @@ load_dotenv(find_dotenv())
 URI = "neo4j://127.0.0.1:7687"
 AUTH_USER = "neo4j"
 AUTH_PASSWORD = "master2025"
-DATABASE = "rag"
+DATABASE = "rag"  
 
 INDEX_NAME = "rag_chunks"
 NODE_LABEL = "Chunk"
@@ -212,6 +212,8 @@ If something is not covered by the context, explicitly say so.
 # -----------------------------
 
 def chat_loop():
+    SCRIPT_NAME = "ONLY RAG"   # oder automatisch: os.path.basename(__file__)
+
     print("Advanced RAG chat. Type 'exit' to quit.")
     while True:
         q = input("\nFrage: ").strip()
@@ -219,8 +221,14 @@ def chat_loop():
             continue
         if q.lower() in {"exit", "quit"}:
             break
+
+        # ---- Antwort generieren ----
         ans = answer_advanced_rag(q)
         print("\nResponse:\n", ans)
+
+        # ---- Logging hinzufügen ----
+        log_antwort(SCRIPT_NAME, q, ans)
+
 
 
 if __name__ == "__main__":
