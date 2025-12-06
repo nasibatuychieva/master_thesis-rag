@@ -1,0 +1,77 @@
+subject,relation,object,subject_chunk,object_chunk,source
+Arduino due,Has,32-bit architecture,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+32-bit architecture,Has,Arduino due,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Arduino due,Has,Clock speed of 84 mhz,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Clock speed of 84 mhz,Has,Arduino due,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Arduino due,Combines,Atmel sam3x8e microcontroller,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Atmel sam3x8e microcontroller,Combines,Arduino due,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Arduino due,Offers,Versatile solution,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Versatile solution,Offers,Arduino due,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Arduino due,Can serve as,Brain of autonomous mobile robot,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Brain of autonomous mobile robot,Can serve as,Arduino due,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Arduino due,Functions as,Versatile controller for diy projects,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Versatile controller for diy projects,Functions as,Arduino due,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Arduino due,Enables,Precise control of stepper motors,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Precise control of stepper motors,Enables,Arduino due,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Arduino due,Serves as,Invaluable tool for prototyping,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Invaluable tool for prototyping,Serves as,Arduino due,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Arduino due,Supports,Arduino libraries,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Arduino libraries,Supports,Arduino due,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Arduino due,Can be utilized for,Real-time data acquisition,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Real-time data acquisition,Can be utilized for,Arduino due,Due-datasheet::c2,Due-datasheet::c2,llmaindex
+Mkr iot carrier rev2,Is,Light controller,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Light controller,Is,Mkr iot carrier rev2,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Mkr iot carrier rev2,Is,Light and water controller,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Light and water controller,Is,Mkr iot carrier rev2,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Mkr iot carrier rev2,Is,Local weather station,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Local weather station,Is,Mkr iot carrier rev2,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Mkr iot carrier rev2,Uses,Rgb light sensor,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Rgb light sensor,Uses,Mkr iot carrier rev2,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Mkr iot carrier rev2,Can be programmed with,Watering system,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Watering system,Can be programmed with,Mkr iot carrier rev2,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Mkr iot carrier rev2,Connected to,Wi-fi®,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Wi-fi®,Connected to,Mkr iot carrier rev2,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Mkr iot carrier rev2,Managed via,Arduino cloud,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Arduino cloud,Managed via,Mkr iot carrier rev2,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Mkr iot carrier rev2,Evaluates,Moisture of soil,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Moisture of soil,Evaluates,Mkr iot carrier rev2,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Mkr iot carrier rev2,Recognizes,Air humidity,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Air humidity,Recognizes,Mkr iot carrier rev2,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Rgb light sensor,Identifies,Amount of light,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Amount of light,Identifies,Rgb light sensor,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,llmaindex
+Arduino Due,UTILIZES,temperature,Due-datasheet::c2,Due-datasheet::c2,simplekg
+temperature,UTILIZES,Arduino Due,Due-datasheet::c2,Due-datasheet::c2,simplekg
+Arduino Due,UTILIZES,humidity,Due-datasheet::c2,Due-datasheet::c2,simplekg
+humidity,UTILIZES,Arduino Due,Due-datasheet::c2,Due-datasheet::c2,simplekg
+Arduino Due,UTILIZES,pressure,Due-datasheet::c2,Due-datasheet::c2,simplekg
+pressure,UTILIZES,Arduino Due,Due-datasheet::c2,Due-datasheet::c2,simplekg
+Arduino Due,CONTROLS,autonomous mobile robot,Due-datasheet::c2,Due-datasheet::c2,simplekg
+autonomous mobile robot,CONTROLS,Arduino Due,Due-datasheet::c2,Due-datasheet::c2,simplekg
+Arduino Due,ENABLES,3D printing,Due-datasheet::c2,Due-datasheet::c2,simplekg
+3D printing,ENABLES,Arduino Due,Due-datasheet::c2,Due-datasheet::c2,simplekg
+Arduino Due,ENABLES,CNC machine,Due-datasheet::c2,Due-datasheet::c2,simplekg
+CNC machine,ENABLES,Arduino Due,Due-datasheet::c2,Due-datasheet::c2,simplekg
+Arduino Due,ENABLES,IoT device prototype,Due-datasheet::c2,Due-datasheet::c2,simplekg
+IoT device prototype,ENABLES,Arduino Due,Due-datasheet::c2,Due-datasheet::c2,simplekg
+Light controller,HAS_SENSOR,RGB light sensor,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+RGB light sensor,HAS_SENSOR,Light controller,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+Light controller,HAS_SENSOR,moisture sensor,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+moisture sensor,HAS_SENSOR,Light controller,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+Light controller,HAS_SENSOR,pressure sensor,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+pressure sensor,HAS_SENSOR,Light controller,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+Light controller,HAS_SENSOR,temperature sensor,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+temperature sensor,HAS_SENSOR,Light controller,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+Light controller,HAS_SENSOR,humidity sensor,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+humidity sensor,HAS_SENSOR,Light controller,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+Light controller,EVALUATES,tropical,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+tropical,EVALUATES,Light controller,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+Light controller,COLLECTS_DATA,RGB light sensor,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+RGB light sensor,COLLECTS_DATA,Light controller,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+Light controller,COLLECTS_DATA,moisture sensor,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+moisture sensor,COLLECTS_DATA,Light controller,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+Light controller,COLLECTS_DATA,pressure sensor,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+pressure sensor,COLLECTS_DATA,Light controller,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+Light controller,COLLECTS_DATA,temperature sensor,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+temperature sensor,COLLECTS_DATA,Light controller,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+Light controller,COLLECTS_DATA,humidity sensor,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg
+humidity sensor,COLLECTS_DATA,Light controller,MKR IoT Carrier Rev2-datasheet::c3,MKR IoT Carrier Rev2-datasheet::c3,simplekg

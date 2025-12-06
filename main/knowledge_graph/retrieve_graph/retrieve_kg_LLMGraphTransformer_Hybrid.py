@@ -8,6 +8,7 @@ from neo4j_graphrag.embeddings.openai import OpenAIEmbeddings
 from neo4j_graphrag.retrievers import VectorCypherRetriever
 from neo4j_graphrag.llm import OpenAILLM
 from neo4j_graphrag.generation import GraphRAG
+from neo4j_graphrag.retrievers import HybridCypherRetriever
 import json
 # ---------------------------------------------------------------------------
 # 1) Konfiguration & Environment
@@ -61,10 +62,11 @@ RETURN DISTINCT
 
 
 # Create retriever
-retriever = VectorCypherRetriever(
+retriever = HybridCypherRetriever(
     driver,
     neo4j_database=DATABASE,
-    index_name="chunkEmbedding_llmagraphtrkg",
+    vector_index_name="chunkEmbedding_llmagraphtrkg",
+    fulltext_index_name="chunkFulltext_llmagraphtrkg",
     embedder=embedder,
     retrieval_query=retrieval_query,
 )
@@ -84,7 +86,7 @@ def safe_log(script, question_id, query_type, question, answer, gold_answer):
         except Exception:
             log_antwort(script, "", "", question, answer, "")
 
-SCRIPT_NAME = "LLMGraphTransformer_VectorCypherRetriever"
+SCRIPT_NAME = "LLMGraphTransformer_HybridCypherRetriever"
 
 QUESTIONS_PATH = Path(
     r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\golden_answers_dataset.jsonl"
@@ -121,11 +123,10 @@ def run_batch_from_file(top_k: int = 20):
                 continue
 
             # id / question_id / query_id robust behandeln
-            question_id = obj.get("id") 
-            query_type  = obj.get("query_type") 
+            question_id = obj.get("id") or obj.get("question_id") or obj.get("query_id")
             question    = obj.get("question")
             gold_answer = obj.get("gold_answer")
-            # factual / relational / summary / ...
+            query_type  = obj.get("query_type")  # factual / relational / summary / ...
 
             if not question:
                 continue
@@ -138,6 +139,7 @@ def run_batch_from_file(top_k: int = 20):
             safe_log(SCRIPT_NAME, question_id, query_type, question, answer, gold_answer)
 
     print("\n[INFO] Batch processing completed.\n")
+
 
 def manual_question(top_k: int = 20):
     qid = input("Question ID (optional): ").strip() or None
@@ -173,4 +175,4 @@ if __name__ == "__main__":
     try:
         main_loop(top_k=5)
     finally:
-        driver.close()
+        driver.close()    

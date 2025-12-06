@@ -56,6 +56,7 @@ password = "master2025"
 #password = "testmaster123"
 uri = "neo4j://127.0.0.1:7687"
 database = "llmakg"   
+#database = "eval-llmaindex"  
 
 graph_store = Neo4jPGStore(
     username=username,
@@ -64,10 +65,10 @@ graph_store = Neo4jPGStore(
     database=database,
 )
 
-NUMBER_OF_ARTICLES = 250
+#NUMBER_OF_ARTICLES = 250
 
 index = PropertyGraphIndex.from_documents(
-    documents[:NUMBER_OF_ARTICLES],
+    documents,
     kg_extractors=[kg_extractor],
     llm=llm,
     embed_model=embed_model,

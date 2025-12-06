@@ -1,0 +1,8 @@
+docker run -d `
+  --name neo4j-docker `
+  -p 7474:7474 `
+  -p 7687:7687 `
+  -e NEO4J_AUTH=neo4j/test123 `
+  -v C:/neo4j-dumps:/var/lib/neo4j/import `
+  -v neo4j-data:/data `
+  neo4j:5.22

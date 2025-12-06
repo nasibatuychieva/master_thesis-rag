@@ -5,10 +5,10 @@ from main.evaluation.logger import log_antwort
 from dotenv import load_dotenv, find_dotenv
 from neo4j import GraphDatabase
 from neo4j_graphrag.embeddings.openai import OpenAIEmbeddings
-from neo4j_graphrag.retrievers import VectorCypherRetriever
+from neo4j_graphrag.retrievers import HybridCypherRetriever
 from neo4j_graphrag.llm import OpenAILLM
 from neo4j_graphrag.generation import GraphRAG
-import json
+
 # ---------------------------------------------------------------------------
 # 1) Konfiguration & Environment
 # ---------------------------------------------------------------------------
@@ -18,7 +18,7 @@ load_dotenv(find_dotenv())
 URI = "neo4j://127.0.0.1:7687"
 AUTH_USER = "neo4j"
 AUTH_PASSWORD = "master2025"
-DATABASE = "llmagraphtrkg"
+DATABASE = "simplekg"
 
 # Neo4j-Driver (DB wird über ENV oder default gewählt)
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
@@ -40,37 +40,63 @@ from neo4j_graphrag.generation.prompts import ERExtractionTemplate
 retrieval_query = """
 WITH node, score
 
-// Entities, die im Chunk erwähnt werden
-OPTIONAL MATCH (node)-[:MENTIONS]->(e:Entity)
+// lokale Produkte an diesem Chunk
+OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(p0:Product)
 
-// optional: zugehöriges Dokument
-OPTIONAL MATCH (node)-[:FROM_DOCUMENT]->(d:Document)
-
+// Kategorien dieser Produkte
 WITH node, score,
-     collect(DISTINCT e) AS entities,
-     collect(DISTINCT d) AS docs
+     collect(DISTINCT p0) AS local_products,
+     collect(DISTINCT p0.category) AS cats
+
+UNWIND cats AS cat
+OPTIONAL MATCH (p_all:Product {category: cat})
+
+// weitere Entities zum Kontext
+OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e:__Entity__)
+
+// alles wieder einsammeln (und local_products im Scope behalten!)
+WITH node, score,
+     local_products,
+     collect(DISTINCT cat)      AS categories,
+     collect(DISTINCT p_all)    AS products_in_category,
+     collect(DISTINCT e)        AS entities
 
 RETURN DISTINCT
   node.text AS text,
   score     AS score,
-  [en IN entities | en.id] AS entities,
-  [d IN docs | d.id]       AS documents
-
+  categories,
+  [p IN products_in_category | p.name] AS products_in_category,
+  [p IN local_products        | p.name] AS local_products,
+  [en IN entities             | en.name] AS entities
 
 """
 
-
 # Create retriever
-retriever = VectorCypherRetriever(
+retriever = HybridCypherRetriever(
     driver,
     neo4j_database=DATABASE,
-    index_name="chunkEmbedding_llmagraphtrkg",
+    vector_index_name="chunkEmbedding_simplekg",
+    fulltext_index_name="chunkFulltext_simplekg",
     embedder=embedder,
     retrieval_query=retrieval_query,
 )
 rag = GraphRAG(retriever=retriever, llm=llm)
 
 # Search
+
+import json
+from pathlib import Path
+
+SCRIPT_NAME = "SimpleKGPipeline_HybridCypherRetriever"
+
+# Pfad zu deinem Gold-Datensatz (wie in der anderen Pipeline)
+QUESTIONS_PATH = Path(
+    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\golden_answers_dataset.jsonl"
+)
+
+# ---------------------------------------------------------------------------
+# Logging-Helfer (nutzt deine neue log_antwort-Signatur)
+# ---------------------------------------------------------------------------
 
 def safe_log(script, question_id, query_type, question, answer, gold_answer):
     """
@@ -79,20 +105,21 @@ def safe_log(script, question_id, query_type, question, answer, gold_answer):
     try:
         log_antwort(script, question_id, query_type, question, answer, gold_answer)
     except Exception:
+        # absolute Fallback – zur Not ohne gold_answer
         try:
             log_antwort(script, question_id, query_type, question, answer, "")
         except Exception:
+            # minimaler Fallback – ohne IDs/Typ
             log_antwort(script, "", "", question, answer, "")
 
-SCRIPT_NAME = "LLMGraphTransformer_VectorCypherRetriever"
 
-QUESTIONS_PATH = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\golden_answers_dataset.jsonl"
-)
+# ---------------------------------------------------------------------------
+# Antwortfunktion für diese Pipeline (GraphRAG über SimpleKGPipeline-KG)
+# ---------------------------------------------------------------------------
 
-def answer_with_rag(question: str, top_k: int = 20) -> str:
+def answer_with_graphrag(question: str, top_k: int = 20) -> str:
     """
-    Verwendet deine neue RAG-Pipeline (rag.search), um eine Antwort zu generieren.
+    Ruft GraphRAG mit dem VectorCypherRetriever auf und gibt nur die Antwort zurück.
     """
     response = rag.search(
         query_text=question,
@@ -101,6 +128,9 @@ def answer_with_rag(question: str, top_k: int = 20) -> str:
     )
     return response.answer
 
+# ---------------------------------------------------------------------------
+# Batch-Modus: Fragen + Gold-Antworten aus JSONL
+# ---------------------------------------------------------------------------
 
 def run_batch_from_file(top_k: int = 20):
     print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
@@ -120,24 +150,27 @@ def run_batch_from_file(top_k: int = 20):
                 print(f"[WARN] Invalid JSON at line {line_no}, skipped.")
                 continue
 
-            # id / question_id / query_id robust behandeln
-            question_id = obj.get("id") 
-            query_type  = obj.get("query_type") 
+            # Robust: id / question_id / query_id akzeptieren
+            question_id = obj.get("id") or obj.get("question_id") or obj.get("query_id")
             question    = obj.get("question")
             gold_answer = obj.get("gold_answer")
-            # factual / relational / summary / ...
+            query_type  = obj.get("query_type")  # z.B. factual / relational / summary
 
             if not question:
                 continue
 
             print(f"[QID {question_id}] [{query_type}] {question}")
-            answer = answer_with_rag(question, top_k=top_k)
+            answer = answer_with_graphrag(question)
             print(f"[ANSWER] {answer}\n")
 
-            # Einheitliches Logging
             safe_log(SCRIPT_NAME, question_id, query_type, question, answer, gold_answer)
 
     print("\n[INFO] Batch processing completed.\n")
+
+
+# ---------------------------------------------------------------------------
+# Manueller Modus
+# ---------------------------------------------------------------------------
 
 def manual_question(top_k: int = 20):
     qid = input("Question ID (optional): ").strip() or None
@@ -148,10 +181,14 @@ def manual_question(top_k: int = 20):
         print("Empty question, skipping.\n")
         return
 
-    answer = answer_with_rag(question, top_k=top_k)
+    answer = answer_with_graphrag(question, top_k=top_k)
     print("\nAnswer:\n", answer, "\n")
 
     safe_log(SCRIPT_NAME, qid, question, answer, gold_answer)
+
+# ---------------------------------------------------------------------------
+# Main-Loop: User wählt manuell vs. Batch
+# ---------------------------------------------------------------------------
 
 def main_loop(top_k: int = 20):
     print("Retrieve_kg_SimpleKGPipeline (VectorCypher + GraphRAG)")
@@ -168,6 +205,8 @@ def main_loop(top_k: int = 20):
             run_batch_from_file(top_k=top_k)
         else:
             print("Please enter 'y', 'n', or 'exit'.\n")
+
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     try:

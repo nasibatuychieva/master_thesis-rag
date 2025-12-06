@@ -18,9 +18,9 @@ from langchain_community.graphs.graph_document import Node, Relationship
 # ------------------------------------------------------------------
 URI = "neo4j://127.0.0.1:7687"
 AUTH_USER = "neo4j"
-AUTH_PASSWORD = "testmaster123"
+#AUTH_PASSWORD = "testmaster123"
 # AUTH_USER = "neo4j"
-# AUTH_PASSWORD = "2025"
+AUTH_PASSWORD = "master2025"
 #DATABASE = "eval-llmgraph"
 DATABASE = "llmagraphtrkg"
 

@@ -9,7 +9,7 @@ import ast
 BASE_DIR = Path(r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation")
 
 QUESTIONS_FILE = BASE_DIR / "questions.jsonl"
-ANSWERS_LOG_FILE = BASE_DIR / "answers_log.csv"
+answers_log_new_FILE = BASE_DIR / "answers_log_new.csv"
 JUDGE_RESULTS_FILE = BASE_DIR / "judge_results.csv"
 
 
@@ -122,8 +122,8 @@ def call_llm_judge(prompt: str) -> dict:
 def run_llm_judge():
     questions_map = load_questions_map()
 
-    # answers_log.csv lesen
-    with open(ANSWERS_LOG_FILE, "r", encoding="utf-8", newline="") as f_in, \
+    # answers_log_new.csv lesen
+    with open(answers_log_new_FILE, "r", encoding="utf-8", newline="") as f_in, \
          open(JUDGE_RESULTS_FILE, "w", encoding="utf-8", newline="") as f_out:
 
         reader = csv.DictReader(f_in)

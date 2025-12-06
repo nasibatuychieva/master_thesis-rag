@@ -76,7 +76,7 @@ RETURN DISTINCT
 retriever = VectorCypherRetriever(
     driver,
     neo4j_database=DATABASE,
-    index_name="chunkEmbedding",
+    index_name="chunkEmbedding_simplekg",
     embedder=embedder,
     retrieval_query=retrieval_query,
 )
@@ -84,35 +84,132 @@ rag = GraphRAG(retriever=retriever, llm=llm)
 
 # Search
 
-def chat_loop(top_k: int = 20):
-    print("Retrieve_kg_SimpleKGPipeline. Type your question or exit for quitting.\n")
+import json
+from pathlib import Path
+
+SCRIPT_NAME = "SimpleKGPipeline_VectorCypherRetriever"
+
+# Pfad zu deinem Gold-Datensatz (wie in der anderen Pipeline)
+QUESTIONS_PATH = Path(
+    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\golden_answers_dataset.jsonl"
+)
+
+# ---------------------------------------------------------------------------
+# Logging-Helfer (nutzt deine neue log_antwort-Signatur)
+# ---------------------------------------------------------------------------
+
+def safe_log(script, question_id, query_type, question, answer, gold_answer):
+    """
+    Unified logging helper.
+    """
+    try:
+        log_antwort(script, question_id, query_type, question, answer, gold_answer)
+    except Exception:
+        # absolute Fallback – zur Not ohne gold_answer
+        try:
+            log_antwort(script, question_id, query_type, question, answer, "")
+        except Exception:
+            # minimaler Fallback – ohne IDs/Typ
+            log_antwort(script, "", "", question, answer, "")
+
+
+# ---------------------------------------------------------------------------
+# Antwortfunktion für diese Pipeline (GraphRAG über SimpleKGPipeline-KG)
+# ---------------------------------------------------------------------------
+
+def answer_with_graphrag(question: str, top_k: int = 20) -> str:
+    """
+    Ruft GraphRAG mit dem VectorCypherRetriever auf und gibt nur die Antwort zurück.
+    """
+    response = rag.search(
+        query_text=question,
+        retriever_config={"top_k": top_k},
+        return_context=True,
+    )
+    return response.answer
+
+# ---------------------------------------------------------------------------
+# Batch-Modus: Fragen + Gold-Antworten aus JSONL
+# ---------------------------------------------------------------------------
+
+def run_batch_from_file():
+    print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
+
+    if not QUESTIONS_PATH.exists():
+        print("[ERROR] golden_answers_dataset.jsonl not found.")
+        return
+
+    with QUESTIONS_PATH.open("r", encoding="utf-8") as f:
+        for line_no, line in enumerate(f, start=1):
+            if not line.strip():
+                continue
+
+            try:
+                obj = json.loads(line)
+            except Exception:
+                print(f"[WARN] Invalid JSON at line {line_no}, skipped.")
+                continue
+
+            # Robust: id / question_id / query_id akzeptieren
+            question_id = obj.get("id") or obj.get("question_id") or obj.get("query_id")
+            question    = obj.get("question")
+            gold_answer = obj.get("gold_answer")
+            query_type  = obj.get("query_type")  # z.B. factual / relational / summary
+
+            if not question:
+                continue
+
+            print(f"[QID {question_id}] [{query_type}] {question}")
+            answer = answer_with_graphrag(question)
+            print(f"[ANSWER] {answer}\n")
+
+            safe_log(SCRIPT_NAME, question_id, query_type, question, answer, gold_answer)
+
+    print("\n[INFO] Batch processing completed.\n")
+
+
+# ---------------------------------------------------------------------------
+# Manueller Modus
+# ---------------------------------------------------------------------------
+
+def manual_question(top_k: int = 20):
+    qid = input("Question ID (optional): ").strip() or None
+    question = input("Question: ").strip()
+    gold_answer = input("Gold Answer (optional): ").strip() or None
+
+    if not question:
+        print("Empty question, skipping.\n")
+        return
+
+    answer = answer_with_graphrag(question, top_k=top_k)
+    print("\nAnswer:\n", answer, "\n")
+
+    safe_log(SCRIPT_NAME, qid, question, answer, gold_answer)
+
+# ---------------------------------------------------------------------------
+# Main-Loop: User wählt manuell vs. Batch
+# ---------------------------------------------------------------------------
+
+def main_loop(top_k: int = 20):
+    print("Retrieve_kg_SimpleKGPipeline (VectorCypher + GraphRAG)")
+    print("Type 'exit' to quit.\n")
+
     while True:
-        question = input("> ").strip()
-        if not question:
-            continue
-        if question.lower() in ("exit", "quit", "q"):
+        mode = input("Manual question? (y/n, or 'exit'): ").strip().lower()
+
+        if mode in ("exit", "quit", "q"):
             break
+        elif mode in ("y", "yes"):
+            manual_question(top_k=top_k)
+        elif mode in ("n", "no"):
+            run_batch_from_file(top_k=top_k)
+        else:
+            print("Please enter 'y', 'n', or 'exit'.\n")
 
-        q_lower = question.lower()
-
-        # Standard: GraphRAG über Chunks
-        response = rag.search(
-            query_text=question,
-            retriever_config={"top_k": top_k},
-            return_context=True,
-        )
-        answer = response.answer  
-        print("\nAntwort:\n")
-        print(answer)
-
- 
-        # Logging für RAG Antwort
-        log_antwort("SimpleKGPipeline_Retriever", question, answer)
-
-
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     try:
-        chat_loop(top_k=5)
+        main_loop(top_k=5)
     finally:
         driver.close()

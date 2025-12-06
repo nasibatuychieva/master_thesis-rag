@@ -20,7 +20,8 @@ load_dotenv(find_dotenv())
 
 URI = "neo4j://127.0.0.1:7687"
 AUTH_USER = "neo4j"
-AUTH_PASSWORD = "testmaster123"
+AUTH_PASSWORD = "master2025"
+#AUTH_PASSWORD = "testmaster123"
 #DATABASE = "eval-simlekg"
 DATABASE = "simplekg"
 
