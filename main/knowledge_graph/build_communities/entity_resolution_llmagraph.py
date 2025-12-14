@@ -14,7 +14,7 @@ from langchain_neo4j import Neo4jGraph
 URI = "neo4j://127.0.0.1:7687"
 AUTH_USER = "neo4j"
 AUTH_PASSWORD = "master2025"
-DATABASE = "llmakg"  # ggf. korrigieren
+DATABASE = "llmagraphtrkg"  # ggf. korrigieren
 
 MAX_WORKERS = 10
 
@@ -30,41 +30,37 @@ print("\n=== Connected to Neo4j Knowledge Graph ===\n")
 
 potential_duplicate_candidates = graph.query(
     """
-WITH [
-  'arduino', 'board', 'boards', 'processor', 'processors',
-  'sensor', 'sensors', 'module', 'modules', 'shield', 'shields',
-  'kit', 'kits', 'dev', 'development'
-] AS genericWords
+      WITH [
+        'arduino', 'board', 'boards', 'processor', 'processors',
+        'sensor', 'sensors', 'module', 'modules', 'shield', 'shields',
+        'kit', 'kits', 'dev', 'development'
+      ] AS genericWords
 
-// 1) Nur __Entity__-Knoten mit nicht-leerem id
-MATCH (e:__Entity__)
-WHERE e.id IS NOT NULL
+      MATCH (e:Entity)
+      WHERE e.id IS NOT NULL
+        AND e.entityType IS NOT NULL
 
-// 2) id bereinigen (nur a–z, 0–9; alles andere → Leerzeichen)
-WITH e, genericWords,
-     apoc.text.replace(toLower(e.id), '[^a-z0-9]+', ' ') AS cleaned
+      WITH e, genericWords,
+          apoc.text.replace(toLower(e.id), '[^a-z0-9]+', ' ') AS cleaned
 
-// 3) In Tokens splitten, generische Wörter entfernen
-WITH e,
-     [w IN split(cleaned, ' ')
-      WHERE w <> '' AND NOT w IN genericWords] AS tokens
+      WITH e,
+          [w IN split(cleaned, ' ')
+            WHERE w <> '' AND NOT w IN genericWords] AS tokens
 
-// 4) Tokens normalisieren (Sort + Set)
-WITH e,
-     apoc.coll.sort(apoc.coll.toSet(tokens)) AS normTokens
-WHERE size(normTokens) > 0
+      WITH e,
+          apoc.coll.sort(apoc.coll.toSet(tokens)) AS normTokens
 
-// 5) Alle Knoten mit gleichen normTokens einsammeln
-WITH normTokens, collect(e) AS nodes
-WHERE size(nodes) > 1   // nur Gruppen mit potentiellen Duplikaten
+      WHERE size(normTokens) > 0
 
-// 6) Ausgabe
-RETURN
-  normTokens,
-  size(nodes) AS duplicateCount,
-  [n IN nodes | n.id] AS combinedResult
-ORDER BY duplicateCount DESC, normTokens;
+      WITH e.entityType AS entityType, normTokens, collect(e) AS nodes
+      WHERE size(nodes) > 1
 
+      RETURN
+        entityType,
+        normTokens,
+        size(nodes) AS duplicateCount,
+        [n IN nodes | n.id] AS combinedResult
+      ORDER BY duplicateCount DESC, entityType, normTokens;
     """
 )
 
@@ -122,25 +118,24 @@ print("Duplicate merge groups:", len(merged_entities))
 result = graph.query(
     """
     UNWIND $data AS candidates
-CALL {
-  WITH candidates
-  MATCH (e:__Entity__)
-  WHERE e.id IN candidates
-  RETURN collect(e) AS nodes
-}
-CALL apoc.refactor.mergeNodes(
-  nodes,
-  {
-    mergeRels: true,
-    properties: {
-      description: 'combine',
-      `.*`: 'discard'
+    CALL {
+      WITH candidates
+      MATCH (e:Entity) 
+      WHERE e.id IN candidates
+      RETURN collect(e) AS nodes
     }
-  }
-)
-YIELD node
-RETURN count(*) AS mergedGroups;
-
+    CALL apoc.refactor.mergeNodes(
+      nodes,
+      {
+        mergeRels: true,
+        properties: {
+          description: 'combine',
+          `.*`: 'discard'
+        }
+      }
+    )
+    YIELD node
+    RETURN count(*) AS mergedGroups
     """,
     params={"data": merged_entities}
 )

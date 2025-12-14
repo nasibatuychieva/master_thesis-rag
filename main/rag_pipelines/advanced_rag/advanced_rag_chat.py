@@ -403,9 +403,13 @@ User question:
 Context (summarized from retrieved documentation):
 {fused_context}
 
-Answer the user's question in as much technical detail as needed.
-If something is not covered by the context, explicitly say so.
+Answer the user's question concisely:
+
+- Use at most 5 short sentences.
+- Include only information that is directly supported by the context.
+- If something is not covered by the context, say briefly: "The documentation snippet does not contain this information."
 """
+
     answer = llm_answer.invoke(answer_prompt).content.strip()
     source_files = []
     for d in docs:

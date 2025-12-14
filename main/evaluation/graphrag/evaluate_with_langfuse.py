@@ -1,13 +1,13 @@
 """
-Offline-Evaluation mit LLM-as-a-Judge (Variante A)
-- Liest QA-Paare aus answers_log_new.csv
-- Ruft OpenAI (gpt-4o-mini) auf, um einen Score 1–5 zu berechnen
-- Loggt alles in Langfuse (Trace + Score)
+Offline-Evaluation mit LLM-as-a-Judge (5 Metriken)
+- Liest QA-Paare aus answers_log.csv
+- Ruft OpenAI (gpt-4o-mini) für 5 Metriken auf:
+  Correctness, Relevance, Conciseness,
+  Context Correctness, Hallucination
+- Loggt alles in Langfuse (Trace + Scores)
 
-Voraussetzungen:
-- OPENAI_API_KEY in .env
-- LANGFUSE_SECRET_KEY und LANGFUSE_PUBLIC_KEY in .env
-- answers_log_new.csv mit Spalten: script,question_id,question,answer,gold_answer
+CSV-Schema:
+  script,question_id,query_type,question,answer,gold_answer
 """
 
 from pathlib import Path
@@ -15,7 +15,6 @@ import csv
 from typing import Optional
 
 from dotenv import load_dotenv, find_dotenv
-
 from openai import OpenAI
 from langfuse import get_client
 
@@ -25,34 +24,66 @@ from langfuse import get_client
 
 load_dotenv(find_dotenv())
 
-# OpenAI-Client (nutzt OPENAI_API_KEY aus .env)
-oa_client = OpenAI()
+oa_client = OpenAI()          # nutzt OPENAI_API_KEY
+langfuse = get_client()       # nutzt LANGFUSE_* Keys
 
-# Langfuse-Client (v3 SDK)
-langfuse = get_client()
-
-# Pfad zu deiner CSV-Datei
 CSV_PATH = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\answers_log_new.csv"
+    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\answers_log.csv"
 )
 
-# Name des Scores, wie er in Langfuse angezeigt werden soll
-SCORE_NAME = "qa_correctness_thesis"
-
-# Welches OpenAI-Modell für den Judge verwendet wird
 JUDGE_MODEL = "gpt-4o-mini"
 
+# Score-Namen in Langfuse
+SCORE_NAME_CORRECTNESS          = "qa_correctness_thesis"
+SCORE_NAME_RELEVANCE            = "qa_relevance_thesis"
+SCORE_NAME_CONCISENESS          = "qa_conciseness_thesis"
+SCORE_NAME_CONTEXT_CORRECTNESS  = "qa_context_correctness_thesis"
+SCORE_NAME_HALLUCINATION        = "qa_hallucination_thesis"
+
 
 # -------------------------------------------------------------------
-# 2) LLM-Judge Funktion
+# 2) Gemeinsame Helper-Funktion: OpenAI aufrufen und 1–5 extrahieren
 # -------------------------------------------------------------------
 
-def judge_with_llm(query: str, answer: str, gold: str) -> float:
+def call_openai_for_score(prompt: str) -> float:
     """
-    Ruft OpenAI auf, um einen Score zwischen 1 und 5 zu bestimmen.
-    Bewertet: "Wie korrekt ist die Modellantwort im Vergleich zur Gold-Antwort?"
+    Ruft OpenAI auf und erwartet eine Zahl 1–5 als Antwort.
     """
+    try:
+        resp = oa_client.chat.completions.create(
+            model=JUDGE_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+        )
 
+        raw_content: Optional[str] = resp.choices[0].message.content
+        if raw_content is None:
+            print("Warnung: LLM hat keine Antwort geliefert, fallback = 3")
+            return 3.0
+
+        raw = raw_content.strip()
+        first_token = raw.split()[0]  # erstes Token (sollte eine Zahl sein)
+
+        score_int = int(first_token)
+        if score_int < 1 or score_int > 5:
+            print(f"Warnung: Score außerhalb [1,5]: {score_int}, fallback = 3")
+            return 3.0
+
+        return float(score_int)
+
+    except Exception as e:
+        print(f"Fehler beim LLM-Aufruf: {e}. Fallback-Score = 3")
+        return 3.0
+
+
+# -------------------------------------------------------------------
+# 3) Einzelne Metriken (jeweils anderer Prompt)
+# -------------------------------------------------------------------
+
+def judge_correctness(query: str, answer: str, gold: str) -> float:
+    """
+    Wie korrekt ist die Modellantwort im Vergleich zur Gold-Antwort?
+    """
     prompt = f"""
 You are an evaluation model for question answering.
 
@@ -75,39 +106,126 @@ Score from 1 to 5:
 
 Return ONLY the number (1, 2, 3, 4, or 5).
 """
+    return call_openai_for_score(prompt)
 
-    try:
-        resp = oa_client.chat.completions.create(
-            model=JUDGE_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.0,
-        )
 
-        raw_content: Optional[str] = resp.choices[0].message.content
-        if raw_content is None:
-            print("Warnung: LLM hat keine Antwort geliefert, fallback = 3")
-            return 3.0
+def judge_relevance(query: str, answer: str, gold: str) -> float:
+    """
+    Wie relevant ist die Antwort für die Frage (inhaltliche Passung, nicht Stil)?
+    """
+    prompt = f"""
+You are an evaluation model for question answering.
 
-        raw = raw_content.strip()
-        # Nur die erste Zeile / das erste Token nehmen
-        first_token = raw.split()[0]
+Query:
+{query}
 
-        score_int = int(first_token)
-        # Sicherheitscheck: nur Werte 1–5 zulassen
-        if score_int < 1 or score_int > 5:
-            print(f"Warnung: Score außerhalb [1,5]: {score_int}, fallback = 3")
-            return 3.0
+Model answer:
+{answer}
 
-        return float(score_int)
+Evaluate how relevant the model answer is to the given query.
+Focus on whether the answer addresses the user's question.
+Minor correctness issues are acceptable as long as the answer
+is about the right topic.
 
-    except Exception as e:
-        # Bei Rate-Limit o.Ä. nicht alles abbrechen, sondern fallback
-        print(f"Fehler beim LLM-Aufruf: {e}. Fallback-Score = 3")
-        return 3.0
+Score from 1 to 5:
+1 = not relevant at all
+3 = partially relevant / mixed
+5 = fully relevant and focused on the query
+
+Return ONLY the number (1, 2, 3, 4, or 5).
+"""
+    return call_openai_for_score(prompt)
+
+
+def judge_conciseness(query: str, answer: str, gold: str) -> float:
+    """
+    Wie prägnant ist die Antwort (nicht zu lang, nicht unnötig redundant)?
+    """
+    prompt = f"""
+You are an evaluation model for answer conciseness.
+
+Query:
+{query}
+
+Model answer:
+{answer}
+
+Evaluate how concise and to-the-point the model answer is,
+while still covering the necessary information.
+
+Score from 1 to 5:
+1 = very verbose or rambling, lots of unnecessary text
+3 = somewhat concise but contains some redundancy
+5 = very concise and clear, no unnecessary information
+
+Return ONLY the number (1, 2, 3, 4, or 5).
+"""
+    return call_openai_for_score(prompt)
+
+
+def judge_context_correctness(query: str, answer: str, gold: str) -> float:
+    """
+    Wie gut bleibt die Antwort innerhalb der Fakten, die in der Gold-Antwort
+    ausgedrückt werden? (Kein Widerspruch, keine erfundenen Details.)
+    """
+    prompt = f"""
+You are an evaluation model for context faithfulness.
+
+Query:
+{query}
+
+Model answer:
+{answer}
+
+Reference (gold answer):
+{gold}
+
+Evaluate how well the model answer stays faithful to the information
+that could reasonably be derived from the reference. Penalize invented
+facts that contradict the reference.
+
+Score from 1 to 5:
+1 = mostly unsupported or contradicting the reference
+3 = partly consistent but with some unsupported details
+5 = fully consistent and supported by the reference
+
+Return ONLY the number (1, 2, 3, 4, or 5).
+"""
+    return call_openai_for_score(prompt)
+
+
+def judge_hallucination(query: str, answer: str, gold: str) -> float:
+    """
+    Misst das Ausmaß von Halluzinationen (erfundene Fakten).
+    5 = keine Halluzination, 1 = starke Halluzination.
+    """
+    prompt = f"""
+You are an evaluation model for hallucination detection in QA.
+
+Query:
+{query}
+
+Model answer:
+{answer}
+
+Reference (gold answer):
+{gold}
+
+Evaluate to what extent the model answer introduces information
+that is not supported by the reference and is likely hallucinated.
+
+Score from 1 to 5:
+1 = heavily hallucinated, many unsupported or wrong details
+3 = some unsupported or speculative statements
+5 = no hallucination, all content is supported or safely inferred
+
+Return ONLY the number (1, 2, 3, 4, or 5).
+"""
+    return call_openai_for_score(prompt)
 
 
 # -------------------------------------------------------------------
-# 3) Hauptfunktion: CSV durchgehen und bewerten
+# 4) Hauptfunktion: CSV einlesen, 5 Scores pro Zeile berechnen
 # -------------------------------------------------------------------
 
 def main():
@@ -115,63 +233,101 @@ def main():
         raise FileNotFoundError(f"CSV not found at: {CSV_PATH}")
 
     with CSV_PATH.open("r", encoding="utf-8", newline="") as f:
-        reader = csv.DictReader(f)
+        reader = csv.DictReader(f, skipinitialspace=True)
+
+        print("Raw fieldnames from CSV:", reader.fieldnames)
 
         for row in reader:
-            # Spaltennamen an deine CSV anpassen
-            qid = row.get("question_id") or row.get("id")
-            question = row.get("question", "").strip()
-            answer = row.get("answer", "").strip()
-            gold = row.get("gold_answer", "").strip()
+            # leichte Bereinigung
+            clean_row = {}
+            for k, v in row.items():
+                if k is None:
+                    continue
+                key = k.strip().lstrip("\ufeff")
+                value = (v or "").strip()
+                clean_row[key] = value
+
+            qid        = clean_row.get("question_id") or clean_row.get("id")
+            question   = clean_row.get("question", "")
+            answer     = clean_row.get("answer", "")
+            gold       = clean_row.get("gold_answer", "")
+            script     = clean_row.get("script", "")
+            query_type = clean_row.get("query_type", "")
 
             if not question or not answer:
                 print(f"Skip row {qid}: missing question or answer")
                 continue
 
-            # 1) Observation / Span in Langfuse starten
             with langfuse.start_as_current_observation(
                 as_type="span",
                 name="offline_eval_row",
             ) as span:
 
-                # 2) Input (Frage, Antwort, Gold) im Span speichern
+                # Input (für späteres Mapping im Export)
                 span.update(
                     input={
                         "question_id": qid,
+                        "script": script,
+                        "query_type": query_type,
                         "question": question,
                         "answer": answer,
                         "gold_answer": gold,
                     }
                 )
 
-                # 3) LLM-Judge ausführen
-                score_value = judge_with_llm(question, answer, gold)
+                # --- 5 Metriken berechnen (nacheinander, also 5 OpenAI-Calls) ---
+                correctness   = judge_correctness(question, answer, gold)
+                relevance     = judge_relevance(question, answer, gold)
+                conciseness   = judge_conciseness(question, answer, gold)
+                ctx_correct   = judge_context_correctness(question, answer, gold)
+                hallucination = judge_hallucination(question, answer, gold)
 
-                # Optional: Output im Span speichern (z.B. für Debug)
+                # Optional: alles im Output speichern
                 span.update(
                     output={
-                        "qa_correctness_score": score_value,
+                        "correctness": correctness,
+                        "relevance": relevance,
+                        "conciseness": conciseness,
+                        "context_correctness": ctx_correct,
+                        "hallucination": hallucination,
                     }
                 )
 
-                # 4) Score als numerischen Score in Langfuse speichern
+                # --- Scores nach Langfuse schicken ---
                 span.score_trace(
-                    name=SCORE_NAME,
-                    value=score_value,
+                    name=SCORE_NAME_CORRECTNESS,
+                    value=correctness,
+                    data_type="NUMERIC",
+                )
+                span.score_trace(
+                    name=SCORE_NAME_RELEVANCE,
+                    value=relevance,
+                    data_type="NUMERIC",
+                )
+                span.score_trace(
+                    name=SCORE_NAME_CONCISENESS,
+                    value=conciseness,
+                    data_type="NUMERIC",
+                )
+                span.score_trace(
+                    name=SCORE_NAME_CONTEXT_CORRECTNESS,
+                    value=ctx_correct,
+                    data_type="NUMERIC",
+                )
+                span.score_trace(
+                    name=SCORE_NAME_HALLUCINATION,
+                    value=hallucination,
                     data_type="NUMERIC",
                 )
 
-                print(f"Row {qid}: Score = {score_value}")
+                print(
+                    f"Row {qid}: "
+                    f"C={correctness}, R={relevance}, "
+                    f"Con={conciseness}, Ctx={ctx_correct}, H={hallucination}"
+                )
 
-    print(
-        "Fertig – Scores sind in Langfuse unter 'Scores' sichtbar "
-        f"(Score Name = {SCORE_NAME})."
-    )
+    print("Fertig – alle 5 Scores sind in Langfuse unter 'Scores' sichtbar.")
 
-
-# -------------------------------------------------------------------
-# 4) Entry Point
-# -------------------------------------------------------------------
 
 if __name__ == "__main__":
     main()

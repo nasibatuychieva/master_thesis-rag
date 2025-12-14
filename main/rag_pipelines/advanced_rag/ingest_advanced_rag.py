@@ -22,7 +22,7 @@ AUTH_PASSWORD = "master2025"
 DATABASE = "rag"        
 
 BASE_DIR = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\out_aktuell"
+    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\out_aktuell_advanced_rag"
 )
 
 INDEX_NAME = "rag_chunks"

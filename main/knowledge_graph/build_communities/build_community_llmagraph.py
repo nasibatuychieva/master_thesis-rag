@@ -1,19 +1,14 @@
-from graphdatascience import GraphDataScience
-from langchain_neo4j import Neo4jGraph
-
-MAX_WORKERS = 10
-
 from dotenv import load_dotenv
 load_dotenv()
 
 from langchain_openai import OpenAIEmbeddings
 from langchain_neo4j import Neo4jGraph, Neo4jVector
 from graphdatascience import GraphDataScience
+
 URI = "neo4j://127.0.0.1:7687"
 AUTH_USER = "neo4j"
 AUTH_PASSWORD = "master2025"
-DATABASE = "llmakg"
-
+DATABASE = "llmagraphtrkg"  # prüfe den Namen
 
 # ============================================================
 # 1) Verbindung zu Neo4j
@@ -38,12 +33,12 @@ embedding_provider = OpenAIEmbeddings(model="text-embedding-3-small")
 Neo4jVector.from_existing_graph(
     embedding=embedding_provider,
     graph=graph,
-    node_label="__Entity__",
-    text_node_properties=["id"],   # oder ["__Entity__Type", "id", "description"]
+    node_label="Entity",
+    text_node_properties=["id"],   # oder ["entityType", "id", "description"]
     embedding_node_property="embedding",
 )
 
-print("Embeddings for __Entity__ nodes written (or updated).")
+print("Embeddings for Entity nodes written (or updated).")
 
 # ============================================================
 # 3) GDS-Instanz
@@ -67,7 +62,7 @@ if gds.graph.exists(graph_name_1)["exists"]:
 
 G1, result1 = gds.graph.project(
     graph_name_1,
-    "__Entity__",
+    "Entity",
     "*",                   # vorhandene Beziehungen (Richtung egal)
     nodeProperties=["embedding"],
 )
@@ -112,7 +107,7 @@ relationship_projection = {
 
 G2, result2 = gds.graph.project(
     graph_name_2,
-    "__Entity__",
+    "Entity",
     relationship_projection,
 )
 

@@ -142,4 +142,5 @@
 {"id": 84, "query_type": "relational", "question": "What operational loop was used to evaluate the Portenta H7 busy-loop current consumption?", "gold_answer": "The loop consisted of: deep sleep, waking every 595 seconds, acquiring data for 5 seconds, and returning to deep sleep."}
 
 {"id": 85, "query_type": "reasoning", "question": "Why is the Portenta H7 deep-sleep wakeup loop relevant for current measurements?", "gold_answer": "Because it reflects realistic low-power deployment patterns, making the measurements representative of real applications."}
+{"id": 86, "query_type": "summary", "question": "Which products share the same temperature sensor models?", "gold_answer": "Because it reflects realistic low-power deployment patterns, making the measurements representative of real applications."}
 
