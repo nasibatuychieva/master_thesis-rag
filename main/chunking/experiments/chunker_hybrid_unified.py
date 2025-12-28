@@ -79,12 +79,12 @@ def parse_pdf(pdf_path: str) -> List[Dict[str, Any]]:
         for child in getattr(node, "children", []) or []:
             extract_elements(child)
 
-    # ✅ Variante 1: neue Struktur mit root
+    #  Variante 1: neue Struktur mit root
     root = getattr(doc, "root", None)
     if root is not None:
         extract_elements(root)
     else:
-        # ✅ Variante 2: ältere Struktur mit elements
+        #  Variante 2: ältere Struktur mit elements
         elements = getattr(doc, "elements", None) or getattr(res, "elements", None)
         if elements:
             for el in elements:
@@ -234,7 +234,7 @@ def main():
             print(f"[ERROR] {it['path']}: {e}")
 
     save_jsonl(out_file, [c.__dict__ for c in all_chunks])
-    print(f"✅ {len(all_chunks)} chunks → {out_file}")
+    print(f" {len(all_chunks)} chunks → {out_file}")
 
 if __name__ == "__main__":
     main()

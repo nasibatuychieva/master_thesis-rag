@@ -177,7 +177,7 @@ def main():
 
 
     save_jsonl(out_file, [c.__dict__ for c in all_chunks])
-    print(f"✅ {len(all_chunks)} chunks → {out_file}")
+    print(f" {len(all_chunks)} chunks → {out_file}")
 
 if __name__ == "__main__":
     main()

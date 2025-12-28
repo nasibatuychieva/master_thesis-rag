@@ -23,6 +23,12 @@ graphdatascience
 seaborn
 matplotlib
 langfuse
-
-
+langfuse openai
+docling
+docling transformers
+paddlepaddle
+paddleocr
+pymupdf
+docling-core
+llama-index-retrievers-bm25 rank-bm25
 

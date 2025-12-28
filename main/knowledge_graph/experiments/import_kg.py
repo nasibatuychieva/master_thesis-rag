@@ -25,7 +25,7 @@ class Neo4jImporter:
                         """,
                         head=head, tail=tail
                     )
-        print(f"✅ {len(triplets)} Tripel erfolgreich importiert.")
+        print(f" {len(triplets)} Tripel erfolgreich importiert.")
 
 # Connect to DB 
 importer = Neo4jImporter(

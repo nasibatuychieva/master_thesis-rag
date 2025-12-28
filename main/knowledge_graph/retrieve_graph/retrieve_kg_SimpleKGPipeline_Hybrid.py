@@ -1,13 +1,16 @@
-import os
+import json
 from pathlib import Path
-from typing import Dict
-from main.evaluation.logger import log_antwort
+from typing import Any, Dict, List, Optional, Tuple
+import re
 from dotenv import load_dotenv, find_dotenv
 from neo4j import GraphDatabase
+
 from neo4j_graphrag.embeddings.openai import OpenAIEmbeddings
-from neo4j_graphrag.retrievers import HybridCypherRetriever
+from neo4j_graphrag.retrievers import VectorCypherRetriever, HybridCypherRetriever
 from neo4j_graphrag.llm import OpenAILLM
 from neo4j_graphrag.generation import GraphRAG
+
+from main.evaluation.logger import log_antwort
 
 # ---------------------------------------------------------------------------
 # 1) Konfiguration & Environment
@@ -20,22 +23,28 @@ AUTH_USER = "neo4j"
 AUTH_PASSWORD = "master2025"
 DATABASE = "simplekg"
 
-# Neo4j-Driver (DB wird über ENV oder default gewählt)
+SCRIPT_NAME = "SimpleKG_Hybrid_KG_Retriever"
+
+QUESTIONS_PATH = Path(
+    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\golden_answers_dataset_new.jsonl"
+)
+
+# Neo4j-Driver
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
 driver.verify_connectivity()
 
-# LLM für Schema + KG-Build
+# LLM (Answer Generation)
 llm = OpenAILLM(
     model_name="gpt-4o-mini",
-    model_params={"temperature": 0}
+    model_params={"temperature": 0},
 )
 
-# Embedder für KG-Embeddings (für Knoten/Kanten)
-embedder = OpenAIEmbeddings(
-    model="text-embedding-3-small"
-)
-from neo4j_graphrag.generation.prompts import ERExtractionTemplate
+# Embedder (Vector Search)
+embedder = OpenAIEmbeddings(model="text-embedding-3-small")
 
+# ---------------------------------------------------------------------------
+# 2) Retrieval query (used by VectorCypherRetriever internally)
+# ---------------------------------------------------------------------------
 
 retrieval_query = """
 WITH node, score
@@ -68,10 +77,14 @@ RETURN DISTINCT
   [p IN products_in_category | p.name] AS products_in_category,
   [p IN local_products        | p.name] AS local_products,
   [en IN entities             | en.name] AS entities
-
 """
+LUCENE_SPECIAL = r'(\+|\-|\&\&|\|\||\!|\(|\)|\{|\}|\[|\]|\^|"|~|\*|\?|\:|\\|\/)'
 
-# Create retriever
+def lucene_escape(s: str) -> str:
+    s = re.sub(r"\s+", " ", s.strip())
+    s = re.sub(LUCENE_SPECIAL, r"\\\1", s)  # slash "/" wird zu "\/"
+    return s
+
 retriever = HybridCypherRetriever(
     driver,
     neo4j_database=DATABASE,
@@ -80,63 +93,161 @@ retriever = HybridCypherRetriever(
     embedder=embedder,
     retrieval_query=retrieval_query,
 )
+
 rag = GraphRAG(retriever=retriever, llm=llm)
 
-# Search
-
-import json
-from pathlib import Path
-
-SCRIPT_NAME = "SimpleKGPipeline_HybridCypherRetriever"
-
-# Pfad zu deinem Gold-Datensatz (wie in der anderen Pipeline)
-QUESTIONS_PATH = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\golden_answers_dataset.jsonl"
-)
-
 # ---------------------------------------------------------------------------
-# Logging-Helfer (nutzt deine neue log_antwort-Signatur)
+# 3) Logging helper (context_items wird übergeben)
 # ---------------------------------------------------------------------------
 
-def safe_log(script, question_id, query_type, question, answer, gold_answer):
-    """
-    Unified logging helper.
-    """
+def safe_log(
+    script: str,
+    question_id: str,
+    query_type: str,
+    question: str,
+    answer: str,
+    gold_answer: str,
+    context_items: Optional[List[Dict[str, Any]]] = None,
+):
     try:
+        log_antwort(
+            script,
+            question_id,
+            query_type,
+            question,
+            answer,
+            gold_answer,
+            context_items=context_items,
+        )
+    except TypeError:
+        # logger supports old signature
         log_antwort(script, question_id, query_type, question, answer, gold_answer)
-    except Exception:
-        # absolute Fallback – zur Not ohne gold_answer
+    except Exception as e:
+        print("[WARN] logging failed:", e)
         try:
             log_antwort(script, question_id, query_type, question, answer, "")
         except Exception:
-            # minimaler Fallback – ohne IDs/Typ
             log_antwort(script, "", "", question, answer, "")
 
+# ---------------------------------------------------------------------------
+# 4) Context retrieval (LlamaIndex-style): call retriever directly
+# ---------------------------------------------------------------------------
+
+def retrieve_context_items(question: str, top_k: int = 20) -> List[Dict[str, Any]]:
+    """
+    Retrieve context directly from VectorCypherRetriever (not from GraphRAG response).
+    This is the reliable way to always have context for faithfulness evaluation.
+    """
+    results = None
+
+    # Try APIs across versions
+    if hasattr(retriever, "retrieve"):
+        try:
+            results = retriever.retrieve(query_text=question, top_k=top_k)
+        except TypeError:
+            results = retriever.retrieve(question, top_k=top_k)
+    elif hasattr(retriever, "search"):
+        try:
+            results = retriever.search(query_text=question, top_k=top_k)
+        except TypeError:
+            results = retriever.search(question, top_k=top_k)
+    else:
+        raise RuntimeError("VectorCypherRetriever has no retrieve/search method in this version.")
+
+    context_items: List[Dict[str, Any]] = []
+
+    # Expected: list[dict] from retrieval_query RETURN
+    if isinstance(results, list):
+        for r in results:
+            if isinstance(r, dict):
+                text = str(r.get("text") or "").strip()
+                if not text:
+                    continue
+
+                categories = r.get("categories", [])
+                products_in_category = r.get("products_in_category", [])
+                local_products = r.get("local_products", [])
+                entities = r.get("entities", [])
+                score = r.get("score", "")
+
+                # Build a richer "content" string that your judge can use
+                meta_lines = []
+                if categories:
+                    meta_lines.append(f"Categories: {categories}")
+                if local_products:
+                    meta_lines.append(f"Local products: {local_products}")
+                if products_in_category:
+                    meta_lines.append(f"Products in category: {products_in_category}")
+                if entities:
+                    meta_lines.append(f"Entities: {entities}")
+
+                enriched_text = text
+                if meta_lines:
+                    enriched_text = text + "\n" + "\n".join(meta_lines)
+
+                context_items.append({
+                    "content": enriched_text,
+                    "source": "simplekg_vector_index",
+                    "id": "",          # no chunk_id returned in your query
+                    "score": score,
+                    "categories": categories,
+                    "local_products": local_products,
+                    "products_in_category": products_in_category,
+                    "entities": entities,
+                })
+            else:
+                s = str(r).strip()
+                if s:
+                    context_items.append({"content": s, "source": "simplekg_vector_index", "id": "", "score": ""})
+
+    else:
+        # Unexpected shape -> best-effort
+        s = str(results).strip()
+        if s:
+            context_items.append({"content": s, "source": "simplekg_retriever_raw", "id": "", "score": ""})
+
+    return context_items
 
 # ---------------------------------------------------------------------------
-# Antwortfunktion für diese Pipeline (GraphRAG über SimpleKGPipeline-KG)
+# 5) Answering: GraphRAG answer + Retriever context for logging
 # ---------------------------------------------------------------------------
 
-def answer_with_graphrag(question: str, top_k: int = 20) -> str:
+def answer_with_graphrag(question: str, top_k: int = 20) -> Tuple[str, List[Dict[str, Any]]]:
     """
-    Ruft GraphRAG mit dem VectorCypherRetriever auf und gibt nur die Antwort zurück.
+    Returns (answer, context_items).
+    Answer from GraphRAG; context from retriever directly (reliable).
     """
+    safe_q = lucene_escape(question)
     response = rag.search(
-        query_text=question,
+        query_text=safe_q,
         retriever_config={"top_k": top_k},
-        return_context=True,
+        # return_context=True  # optional, but we do NOT depend on it
     )
-    return response.answer
+    answer = (getattr(response, "answer", None) or "").strip()
+
+    # 🔥 reliable context
+    context_items = retrieve_context_items(safe_q, top_k=top_k)
+
+    # If still empty, keep explicit marker (for debugging + judge transparency)
+    if not context_items:
+        context_items = [{
+            "content": "[NO CONTEXT RETURNED BY RETRIEVER]",
+            "source": "system",
+            "id": "",
+            "score": "",
+        }]
+
+    return answer, context_items
 
 # ---------------------------------------------------------------------------
-# Batch-Modus: Fragen + Gold-Antworten aus JSONL
+# 6) Batch mode (JSONL)
 # ---------------------------------------------------------------------------
 
 def run_batch_from_file(top_k: int = 20):
     print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
 
     if not QUESTIONS_PATH.exists():
-        print("[ERROR] golden_answers_dataset.jsonl not found.")
+        print("[ERROR] golden_answers_dataset_new.jsonl not found.")
         return
 
     with QUESTIONS_PATH.open("r", encoding="utf-8") as f:
@@ -150,48 +261,68 @@ def run_batch_from_file(top_k: int = 20):
                 print(f"[WARN] Invalid JSON at line {line_no}, skipped.")
                 continue
 
-            # Robust: id / question_id / query_id akzeptieren
-            question_id = obj.get("id") or obj.get("question_id") or obj.get("query_id")
-            question    = obj.get("question")
-            gold_answer = obj.get("gold_answer")
-            query_type  = obj.get("query_type")  # z.B. factual / relational / summary
+            question_id = obj.get("id") or obj.get("question_id") or obj.get("query_id") or ""
+            question    = obj.get("question") or ""
+            gold_answer = obj.get("gold_answer") or ""
+            query_type  = obj.get("query_type") or ""
 
             if not question:
                 continue
 
             print(f"[QID {question_id}] [{query_type}] {question}")
-            answer = answer_with_graphrag(question)
-            print(f"[ANSWER] {answer}\n")
 
-            safe_log(SCRIPT_NAME, question_id, query_type, question, answer, gold_answer)
+            answer, context_items = answer_with_graphrag(question, top_k=top_k)
+
+            print(f"[ANSWER]\n{answer}\n")
+            print(f"[CTX] n_context={len([c for c in context_items if c.get('content')])}\n")
+
+            safe_log(
+                SCRIPT_NAME,
+                str(question_id),
+                str(query_type),
+                question,
+                answer,
+                gold_answer,
+                context_items=context_items,   #  pass context
+            )
 
     print("\n[INFO] Batch processing completed.\n")
 
-
 # ---------------------------------------------------------------------------
-# Manueller Modus
+# 7) Manual mode
 # ---------------------------------------------------------------------------
 
 def manual_question(top_k: int = 20):
-    qid = input("Question ID (optional): ").strip() or None
+    qid = input("Question ID (optional): ").strip() or ""
+    qtype = input("Query type (optional, e.g., factual/relational/summary): ").strip() or "manual"
     question = input("Question: ").strip()
-    gold_answer = input("Gold Answer (optional): ").strip() or None
+    gold_answer = input("Gold Answer (optional): ").strip() or ""
 
     if not question:
         print("Empty question, skipping.\n")
         return
 
-    answer = answer_with_graphrag(question, top_k=top_k)
-    print("\nAnswer:\n", answer, "\n")
+    answer, context_items = answer_with_graphrag(question, top_k=top_k)
 
-    safe_log(SCRIPT_NAME, qid, question, answer, gold_answer)
+    print("\nAnswer:\n", answer, "\n")
+    print(f"[CTX] n_context={len([c for c in context_items if c.get('content')])}\n")
+
+    safe_log(
+        SCRIPT_NAME,
+        qid,
+        qtype,
+        question,
+        answer,
+        gold_answer,
+        context_items=context_items,
+    )
 
 # ---------------------------------------------------------------------------
-# Main-Loop: User wählt manuell vs. Batch
+# 8) Main loop
 # ---------------------------------------------------------------------------
 
 def main_loop(top_k: int = 20):
-    print("Retrieve_kg_SimpleKGPipeline (VectorCypher + GraphRAG)")
+    print("SimpleKG Pipeline (GraphRAG answer + Retriever context logging)")
     print("Type 'exit' to quit.\n")
 
     while True:
