@@ -12,6 +12,8 @@ load_dotenv()
 # =============================================================================
 
 # =============================================================================
+import os
+
 URI = os.getenv("NEO4J_URI")
 AUTH_USER = os.getenv("NEO4J_USER")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
