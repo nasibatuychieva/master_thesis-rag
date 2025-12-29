@@ -20,9 +20,9 @@ from neo4j.exceptions import ClientError
 # =============================================================================
 # CONFIG
 # =============================================================================
-URI = "neo4j://127.0.0.1:7687"
-AUTH_USER = "neo4j"
-AUTH_PASSWORD = "master2025"
+URI = os.getenv("NEO4J_URI")
+AUTH_USER = os.getenv("NEO4J_USER")
+AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "llmakg"  # <-- adjust if needed
 
 # Concurrency for LLM calls (keep low to avoid TPM rate limits)

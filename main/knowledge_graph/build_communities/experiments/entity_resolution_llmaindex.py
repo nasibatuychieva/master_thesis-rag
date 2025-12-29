@@ -16,9 +16,9 @@ from langchain_neo4j import Neo4jGraph, Neo4jVector
 
 from graphdatascience import GraphDataScience
 
-URI = "neo4j://127.0.0.1:7687"
-AUTH_USER = "neo4j"
-AUTH_PASSWORD = "master2025"
+URI = os.getenv("NEO4J_URI")
+AUTH_USER = os.getenv("NEO4J_USER")
+AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "llmakg"
 
 MAX_WORKERS = 10

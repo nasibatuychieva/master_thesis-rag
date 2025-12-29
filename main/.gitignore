@@ -1,0 +1,71 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# =========================
+# Virtual Environments
+# =========================
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# =========================
+# VS Code
+# =========================
+.vscode/
+!.vscode/extensions.json
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Logs / Outputs
+# =========================
+*.log
+logs/
+output/
+results/
+tmp/
+
+# =========================
+# Notebooks
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# LLM / RAG Artifacts
+# =========================
+cache/
+embeddings/
+vector_store/
+faiss_index/
+chroma/
+llama_index/
+storage/
+
+# =========================
+# Neo4j
+# =========================
+neo4j-data/
+data/
+import/
+logs/
+transactions/
+
+# =========================
+# Secrets
+# =========================
+*.key
+*.pem
+*.crt
+ressources/
+.retriever311/
