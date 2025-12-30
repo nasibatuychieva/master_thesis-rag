@@ -10,22 +10,26 @@ from langchain_core.documents import Document
 # 1) Define Properties 
 # -----------------------------
 
-# set OPENAI_API_KEY as environment variable 
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
-
-
-
-import os
 
 URI = os.getenv("NEO4J_URI")
 AUTH_USER = os.getenv("NEO4J_USER")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "rag"        
 
-BASE_DIR = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\out_aktuell"
+
+
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+
+BASE_DIR_PATH = (
+    PROJECT_ROOT
+    / "main"
+    / "out_aktuell"
 )
+
+
+BASE_DIR  =  Path(os.getenv("ANSWERS_LOG_PATH", str(BASE_DIR_PATH))).expanduser().resolve()
 
 INDEX_NAME = "rag_chunks"
 NODE_LABEL = "Chunk"
@@ -70,7 +74,7 @@ def main():
     docs = load_chunks_from_jsonl(BASE_DIR)
     print(f"Loaded {len(docs)} chunks.")
 
-    embeddings = OpenAIEmbeddings()  # z.B. text-embedding-3-large / ada-002 je nach Account
+    embeddings = OpenAIEmbeddings()  
 
     print("Writing chunks + embeddings into Neo4j (this may take a while)...")
 
@@ -85,7 +89,7 @@ def main():
         node_label=NODE_LABEL,
         text_node_property=TEXT_PROPERTY,
         embedding_node_property=EMB_PROPERTY,
-        # metadata wird automatisch als Properties gespeichert
+       
     )
 
     print("Done. Vector index created in Neo4j:")

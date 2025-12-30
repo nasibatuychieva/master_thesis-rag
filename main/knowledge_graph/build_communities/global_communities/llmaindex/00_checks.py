@@ -1,18 +1,18 @@
 from neo4j import GraphDatabase
 
 # -----------------------------
-# FIXED CONFIG (NO ENV)
+# FIXED CONFIG 
 # -----------------------------
 import os
 
 URI = os.getenv("NEO4J_URI")
 AUTH_USER = os.getenv("NEO4J_USER")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
-DATABASE = "llmakg"   # <-- ändere falls dein 2. Graph in anderer DB liegt
+DATABASE = "llmakg"   
 
-# Labels/Rel für deinen 2. Graph (aus Screenshot)
+
 CHUNK_LABEL = "Chunk"
-ENTITY_LABEL = "entity"       # <-- wichtig: klein!
+ENTITY_LABEL = "entity"     
 MENTIONS_REL = "MENTIONS"
 
 EMBED_PROP = "embedding"
@@ -64,7 +64,7 @@ def main():
         for r in sample:
             print("  ", r)
 
-        # 5) Check GDS installed (returns version if available)
+   
         try:
             gds_ver = session.run("CALL gds.version() YIELD version RETURN version").single()["version"]
             print("[GDS] version:", gds_ver)

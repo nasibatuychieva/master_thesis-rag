@@ -17,13 +17,18 @@ load_dotenv(find_dotenv())
 embed_model = OpenAIEmbedding(model="text-embedding-3-small")
 llm = OpenAI(model="gpt-4o-mini", temperature=0)
 
-# JSONL-Dateien laden
-BASE_DIR = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\out_aktuell"
+from pathlib import Path
+
+import os
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+
+BASE_DIR_PATH = (
+    PROJECT_ROOT
+    / "main"
+    / "out_aktuell"
 )
-# BASE_DIR = Path(
-#     r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\triples"
-# )
+
+BASE_DIR  =  Path(os.getenv("ANSWERS_LOG_PATH", str(BASE_DIR_PATH))).expanduser().resolve()
 documents = []
 for jsonl_path in BASE_DIR.rglob("*.jsonl"):
     with open(jsonl_path, "r", encoding="utf-8") as f:
@@ -47,21 +52,20 @@ kg_extractor = SimpleLLMPathExtractor(
     llm=llm,
     max_paths_per_chunk=10,
     num_workers=4,
-    # show_progress=False,  # nur, falls deine Version diesen Parameter kennt
+  
 )
 
 # Neo4j-GraphStore
-username = "neo4j"
-password = "master2025"
-#password = "testmaster123"
-uri = "neo4j://127.0.0.1:7687"
+URI = os.getenv("NEO4J_URI")
+AUTH_USER = os.getenv("NEO4J_USER")
+AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 database = "llmakg"   
-#database = "eval-llmaindex"  
+
 
 graph_store = Neo4jPGStore(
-    username=username,
-    password=password,
-    url=uri,
+    username=AUTH_USER ,
+    password=AUTH_PASSWORD,
+    url=URI,
     database=database,
 )
 

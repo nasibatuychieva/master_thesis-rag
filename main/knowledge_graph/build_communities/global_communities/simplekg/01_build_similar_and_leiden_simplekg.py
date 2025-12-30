@@ -2,7 +2,7 @@ from neo4j import GraphDatabase
 from graphdatascience import GraphDataScience
 
 # -----------------------------
-# FIXED CONFIG (NO ENV)
+# FIXED CONFIG 
 # -----------------------------
 import os
 

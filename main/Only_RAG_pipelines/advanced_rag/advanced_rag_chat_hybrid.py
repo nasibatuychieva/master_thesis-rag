@@ -1,7 +1,3 @@
-# ============================================================================
-
-# ============================================================================
-
 import json
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
@@ -32,11 +28,11 @@ TEXT_PROPERTY = "text"
 FULLTEXT_INDEX_NAME = "chunk_text_ft"
 
 # Dense index (Neo4j vector index)
-VECTOR_INDEX_NAME = "rag_chunks"         # <- change if your vector index name differs
-EMB_PROPERTY = "embedding"               # <- change if your embedding property differs
+VECTOR_INDEX_NAME = "rag_chunks"         
+EMB_PROPERTY = "embedding"              
 
 # Hybrid parameters
-ALPHA = 0.6  # 0..1 ; higher => more weight on dense retrieval
+ALPHA = 0.6  
 RETRIEVE_K_SPARSE = 30
 RETRIEVE_K_DENSE = 30
 RERANK_TOP_K = 6
@@ -67,7 +63,7 @@ llm_router = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
 llm_rerank = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
 llm_answer = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
 
-# Dense query embedder (must match your stored embeddings model/dimensions)
+
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
 # ----------------------------------------------------------------------------
@@ -138,7 +134,7 @@ def retrieve_sparse(pre: Dict[str, Any], k: int) -> List[Dict[str, Any]]:
             if not text.strip():
                 continue
 
-            # IMPORTANT: we need a stable id for dedupe
+          
             chunk_id = node.get("chunk_id") or node.get("id") or ""
 
             rows.append({
@@ -212,7 +208,7 @@ def fuse_hybrid(
     def upsert(row: Dict[str, Any], kind: str):
         cid = (row.get("chunk_id") or "").strip()
         if not cid:
-            # fallback: hash text (still dedupe-ish)
+          
             cid = f"txt:{hash(row.get('text',''))}"
 
         if cid not in merged:
@@ -235,7 +231,7 @@ def fuse_hybrid(
             merged[cid]["dense_score"] = d
             merged[cid]["dense_norm"] = dense_norm_map.get(d, 0.0)
 
-        # prefer the more informative metadata if one side has it
+       
         if isinstance(row.get("meta"), dict) and row["meta"]:
             merged[cid]["meta"].update(row["meta"])
 
@@ -270,7 +266,7 @@ def rerank_and_select(pre: Dict[str, Any], docs: List[Document], top_k: int) -> 
 
     # keep the prompt small(ish)
     doc_blocks = []
-    for i, d in enumerate(docs[: min(len(docs), 25)]):  # cap shown docs to 25
+    for i, d in enumerate(docs[: min(len(docs), 25)]):  
         doc_blocks.append(
             f"[DOC {i} | file={d.metadata.get('file_name','?')} | hybrid={d.metadata.get('hybrid_score','?'):.4f}]\n"
             f"{d.page_content}"
@@ -346,7 +342,7 @@ Rules:
 """
     answer = llm_answer.invoke(answer_prompt).content.strip()
 
-    # context_items for logging
+
     context_items: List[Dict[str, Any]] = []
     for d in selected_docs:
         context_items.append({

@@ -25,11 +25,19 @@ AUTH_USER = os.getenv("NEO4J_USER")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "neo4j"
 
-BASE_DIR = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\out_aktuell"
+from pathlib import Path
+
+import os
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+
+BASE_DIR_PATH = (
+    PROJECT_ROOT
+    / "main"
+    / "out_aktuell"
 )
 
-# Neo4j-Driver (DB wird über ENV oder default gewählt)
+
+BASE_DIR  =  Path(os.getenv("ANSWERS_LOG_PATH", str(BASE_DIR_PATH))).expanduser().resolve()
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
 driver.verify_connectivity()
 

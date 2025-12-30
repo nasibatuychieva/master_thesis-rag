@@ -30,13 +30,13 @@ QUESTIONS_PATH = PROJECT_ROOT / "main" / "evaluation" / "graphrag" / "golden_ans
 COMMUNITY_LABEL = "__Community__"
 LEVEL = int(os.getenv("COMMUNITY_LEVEL", "1"))
 
-# Batch processing like your 2nd retriever (NO dropping)
+
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "8"))
 MAX_CHARS_PER_COMMUNITY = int(os.getenv("MAX_CHARS_PER_COMMUNITY", "6000"))
 MAX_CHARS_PER_BATCH = int(os.getenv("MAX_CHARS_PER_BATCH", "60000"))
 START_BATCH = int(os.getenv("START_BATCH", "0"))  # resume if crash
 
-# Context logging: you wanted ONLY Chunk text in the context column
+
 CHUNKS_LOG_LIMIT_TOTAL = int(os.getenv("CHUNKS_LOG_LIMIT_TOTAL", "60"))
 CHUNKS_LOG_LIMIT_PER_COMMUNITY = int(os.getenv("CHUNKS_LOG_LIMIT_PER_COMMUNITY", "3"))
 
@@ -52,7 +52,7 @@ driver.verify_connectivity()
 llm = ChatOpenAI(model=LLM_MODEL, temperature=LLM_TEMPERATURE)
 
 # =============================================================================
-# Prompts (same idea as 2nd retriever)
+# Prompts 
 # =============================================================================
 BATCH_PROMPT = ChatPromptTemplate.from_messages(
     [
@@ -100,7 +100,7 @@ def safe_log(
     gold_answer: str,
     context_items: Optional[List[Dict[str, Any]]] = None,
 ):
-    # Einmal versuchen – und wenn es knallt, soll es sichtbar sein.
+
     log_antwort(
         script,
         question_id,
@@ -136,8 +136,7 @@ ORDER BY cid
 
 # =============================================================================
 # Chunk fetch for logging (schema-robust)
-# Only used to build the "context_items" you log to CSV.
-# IMPORTANT: we return ONLY chunk_text, and will log ONLY {"content": chunk_text}.
+
 # =============================================================================
 CHUNKS_FOR_COMMUNITY_QUERY = f"""
 MATCH (c:{COMMUNITY_LABEL})
@@ -195,7 +194,7 @@ def build_chunk_context_items_for_logging_from_rows(
     seen: set[str] = set()
 
     # We iterate communities in order (the same order we process batches).
-    # Stop as soon as we hit total_limit to keep CSV rows small.
+
     for r in rows:
         if len(items) >= total_limit:
             break
@@ -205,8 +204,7 @@ def build_chunk_context_items_for_logging_from_rows(
             continue
 
         # This assumes communityId exists and matches cid.
-        # If your cid is the fallback id(c) string, it won't match communityId -> then chunk logging may be empty.
-        # In that case you'll still get answers, just less/no chunk context logged.
+
         chunk_texts = _fetch_chunk_texts_for_community(cid, level=level, limit=per_community_limit)
 
         for txt in chunk_texts:
@@ -280,8 +278,8 @@ def answer_global(
         )
         final_answer = (msg.content or "").strip()
 
-    # ✅ Context logging: ONLY chunk texts (no ids, no metadata)
-    # We build from the full rows list (i.e., global run) but hard-limit the number of chunks logged.
+
+
     context_items = build_chunk_context_items_for_logging_from_rows(
         rows=rows,
         level=level,
@@ -289,8 +287,7 @@ def answer_global(
         per_community_limit=CHUNKS_LOG_LIMIT_PER_COMMUNITY,
     )
 
-    # If no chunks found (e.g., communityId mismatch), fall back to logging NOTHING (as requested).
-    # If you prefer "at least something", you could log community txt instead — but you explicitly asked for chunk text only.
+
     return final_answer, context_items
 
 

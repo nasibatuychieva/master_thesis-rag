@@ -27,11 +27,11 @@ def make_chunker(tokenizer):
     kwargs = dict(
         tokenizer=tokenizer,
         target_token_count=220,      
-        max_tokens_per_chunk=260,    # harte Obergrenze
-        overlap_tokens=40,           # kleiner Overlap
-        merge_peers=False,           # NICHT zusammenführen
+        max_tokens_per_chunk=260,    
+        overlap_tokens=40,           
+        merge_peers=False,          
         prefer_headings=True,        # an Headings schneiden
-        join_short_paragraphs=False, # nichts zusätzlich zusammenkleben
+        join_short_paragraphs=False, 
     )
 
     return HybridChunker(**kwargs)
@@ -53,7 +53,7 @@ def split_by_tokens(text: str, tcount, target=220, maxlen=260):
     for s in sents:
         if not s.strip():
             continue
-        # Falls ein Satz > maxlen → hart auf Wörter splitten
+  
         if tcount(s) > maxlen:
             words, cur = s.split(), []
             for w in words:
@@ -63,7 +63,7 @@ def split_by_tokens(text: str, tcount, target=220, maxlen=260):
             if cur:
                 out.append(" ".join(cur).strip())
             continue
-        # Normal: Sätze zu ~target Tokens bündeln
+   
         if not buf:
             buf = s
         else:
@@ -75,7 +75,7 @@ def split_by_tokens(text: str, tcount, target=220, maxlen=260):
     if buf:
         out.append(buf.strip())
 
-    # Safety: alles, was noch > maxlen ist, erneut splitten
+
     final = []
     for ch in out:
         if tcount(ch) <= maxlen:

@@ -35,7 +35,7 @@ def main():
         res = session.run(q_counts).single()
         print("[Counts]", dict(res))
 
-        # 2) is MENTIONS direction correct? (Chunk -> entity)
+
         q_dir = f"""
         MATCH (c:{CHUNK_LABEL})-[:{MENTIONS_REL}]-(e:{ENTITY_LABEL})
         RETURN count(*) AS chunk_to_entity
@@ -43,7 +43,7 @@ def main():
         dir_ok = session.run(q_dir).single()["chunk_to_entity"]
         print("[MENTIONS direction] Chunk -> entity:", dir_ok)
 
-        # 3) embedding presence
+
         q_embed = f"""
         MATCH (e:{ENTITY_LABEL})
         RETURN
@@ -64,7 +64,7 @@ def main():
         for r in sample:
             print("  ", r)
 
-        # 5) Check GDS installed (returns version if available)
+    
         try:
             gds_ver = session.run("CALL gds.version() YIELD version RETURN version").single()["version"]
             print("[GDS] version:", gds_ver)

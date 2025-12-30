@@ -137,7 +137,7 @@ def to_pretty(obj: Any) -> str:
 
 
 def build_full_content(row: Dict[str, Any]) -> str:
-    # full_content is stored and used for retrieval
+
     content = {
         "level": row["level"],
         "communityId": row["communityId"],
@@ -154,7 +154,7 @@ def safe_parse_json(s: str) -> Dict[str, Any]:
     try:
         return json.loads(s)
     except Exception:
-        # fallback: store raw
+   
         return {"topic_label": "", "summary": s, "key_terms": []}
 
 

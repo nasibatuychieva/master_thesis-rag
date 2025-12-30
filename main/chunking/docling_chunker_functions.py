@@ -10,8 +10,8 @@ def convert_documents_into_docling_doc(pdf_path: Path):
     ocr_opts = TesseractCliOcrOptions(lang=["eng"])  # OCR nur Englisch
 
     pdf_options = PdfPipelineOptions(
-        do_ocr=True,              # OCR aktivieren
-        force_full_page_ocr=True, # für alle Seiten erzwingen
+        do_ocr=True,              # OCR 
+        force_full_page_ocr=True, 
         generate_page_images=False,
         generate_table_images=False,
     )
@@ -40,11 +40,11 @@ def chunk_documents_with_docling(doc, tokenizer):
 
 def return_tokenizer():
     EMBED_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
-    MAX_TOKENS = 800  # set to a small number for illustrative purposes
+    MAX_TOKENS = 800  
 
     tokenizer = HuggingFaceTokenizer(
     tokenizer=AutoTokenizer.from_pretrained(EMBED_MODEL_ID),
-    max_tokens=MAX_TOKENS,  # optional, by default derived from `tokenizer` for HF case
+    max_tokens=MAX_TOKENS,  
     )
     return tokenizer
     

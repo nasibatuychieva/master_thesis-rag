@@ -15,26 +15,26 @@ AUTH_PASSWORD ="master2025"
 DATABASE =  "llmagraphtrkg"
 
 # -----------------------------
-# Tuning knobs
+# Config
 # -----------------------------
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
 EMBED_PROP = "embedding"
 
 TOP_K = int(os.getenv("KNN_TOPK", "15"))
-SIM_CUTOFF = float(os.getenv("KNN_SIM_CUTOFF", "0.80"))  # start value
+SIM_CUTOFF = float(os.getenv("KNN_SIM_CUTOFF", "0.80")) 
 REL_TYPE = "SIMILAR"
 REL_SCORE_PROP = "score"
 
 G_EMBED = "g_entities_embed"
 G_SIM = "g_entities_sim"
 
-# Embedding batch sizes (avoid rate limits / huge payloads)
+
 FETCH_BATCH = int(os.getenv("EMBED_FETCH_BATCH", "200"))
 EMBED_BATCH = int(os.getenv("EMBED_BATCH", "100"))
 
 
 def build_entity_text(row: Dict[str, Any]) -> str:
-    # Robust: missing description is fine
+
     parts = []
     if row.get("id"):
         parts.append(str(row["id"]))
@@ -54,17 +54,17 @@ def main():
     driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
     driver.verify_connectivity()
 
-    # --- Embedder (this is YOUR working one) ---
+   
     embedder = OpenAIEmbeddings(model=EMBED_MODEL)
 
-    # --- Cleanup: old SIMILAR + communities ---
+
     with driver.session(database=DATABASE) as session:
         session.run("MATCH ()-[r:SIMILAR]-() DELETE r;")
         session.run("MATCH (e:Entity) REMOVE e.communities;")
     print("Old SIMILAR rels deleted, communities removed.")
 
-    # --- Step 1: Ensure embeddings exist on Entity nodes ---
-    # We'll embed only nodes without embedding, to save cost.
+ 
+
     total_updated = 0
 
     while True:
@@ -90,9 +90,8 @@ def main():
         # Embed in smaller batches
         all_vectors: List[List[float]] = []
         for batch_idx, text_batch in enumerate(chunk_list(texts, EMBED_BATCH), 1):
-            # neo4j_graphrag OpenAIEmbeddings typically exposes .embed_query/.embed_documents?
-            # It worked in your other script; here we use a safe approach:
-            # If embedder has embed_documents -> use it, else fall back to embedding each query.
+      
+            
             if hasattr(embedder, "embed_documents"):
                 vecs = embedder.embed_documents(text_batch)
             else:

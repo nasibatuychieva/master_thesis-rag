@@ -1,9 +1,3 @@
-# ============================================================================
-# ONLY_RAG_Advanced
-# Retrieval-Augmented Generation (Neo4j Vector + LLM Rerank)
-# with FULL logging for LLM-as-a-Judge (faithfulness-ready)
-# ============================================================================
-
 import json
 from pathlib import Path
 from typing import Dict, List, Tuple, Any
@@ -47,7 +41,6 @@ QUESTIONS_PATH = (
     / "graphrag"
     / "golden_answers_dataset_new.jsonl"
 )
-
 
 # ----------------------------------------------------------------------------
 # 1) Models

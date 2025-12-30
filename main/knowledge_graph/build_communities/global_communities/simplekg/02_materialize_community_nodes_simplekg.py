@@ -1,7 +1,7 @@
 from neo4j import GraphDatabase
 
 # -----------------------------
-# FIXED CONFIG (NO ENV)
+# FIXED CONFIG 
 # -----------------------------
 import os
 
@@ -38,7 +38,7 @@ def main():
         session.run(f"MATCH (c:{COMMUNITY_LABEL}) DELETE c;")
         print("[Cleanup] Done.\n")
 
-        # create community nodes + IN_COMMUNITY edges for every level
+      
         print("[Build] Creating __Community__ nodes and IN_COMMUNITY edges...")
         session.run(f"""
         MATCH (e:{ENTITY_LABEL})
@@ -50,7 +50,7 @@ def main():
         """)
         print("[Build] Done.\n")
 
-        # build parent links: lvl i -> lvl i+1
+    
         print("[Build] Creating PARENT_COMMUNITY hierarchy...")
         session.run(f"""
         MATCH (e:{ENTITY_LABEL})

@@ -1,13 +1,13 @@
 import os
-import math
-from typing import Any, Dict, List, Tuple
+
+from typing import Any, Dict, List
 
 from neo4j import GraphDatabase
 from openai import OpenAI
 from dotenv import load_dotenv
 
 # -----------------------------
-
+# Config
 # -----------------------------
 load_dotenv()
 import os
@@ -24,8 +24,8 @@ EMBED_MODEL = "text-embedding-3-small"
 
 # batching
 READ_BATCH_SIZE = 200
-EMBED_BATCH_SIZE = 100  # OpenAI request batch size
-MAX_TEXT_CHARS = 4000   # safety cap to avoid super long inputs
+EMBED_BATCH_SIZE = 100  
+MAX_TEXT_CHARS = 4000  
 
 # properties to exclude from embedding text
 EXCLUDE_PROPS = {"__tmp_internal_id", "<id>", EMBED_PROP}
@@ -39,7 +39,7 @@ def _normalize_value(v: Any) -> str:
         s = str(v).strip()
         return s
     if isinstance(v, list):
-        # keep small lists readable, avoid huge vectors etc.
+     
         parts = []
         for x in v[:20]:
             xs = _normalize_value(x)
@@ -101,7 +101,7 @@ def build_embedding_text(labels: List[str], props: Dict[str, Any]) -> str:
 
 
 def main():
-    #api_key = os.getenv("OPENAI_API_KEY")
+  
     # if not api_key:
     #     raise RuntimeError("OPENAI_API_KEY is not set in your environment.")
 
@@ -123,7 +123,7 @@ def main():
         print(f"[Stats] total={stat['total']}, with_embedding={stat['with_embedding']}")
 
         # We iterate by internal id for stable paging
-        # (Neo4j internal id is okay for batching reads)
+
         last_id = -1
         processed = 0
         written = 0
@@ -142,7 +142,7 @@ def main():
 
             last_id = rows[-1]["nid"]
 
-            # prepare embedding inputs
+    
             node_ids: List[int] = []
             texts: List[str] = []
 
@@ -151,10 +151,10 @@ def main():
                 labels = r["labels"] or []
                 props = r["props"] or {}
 
-                # Build text (excludes embedding + tmp id)
+           
                 text = build_embedding_text(labels, props)
 
-                # If text empty (shouldn’t happen often), skip
+              
                 if not text.strip():
                     continue
 

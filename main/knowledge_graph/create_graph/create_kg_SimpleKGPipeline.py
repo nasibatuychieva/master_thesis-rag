@@ -23,18 +23,21 @@ import os
 URI = os.getenv("NEO4J_URI")
 AUTH_USER = os.getenv("NEO4J_USER")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
-#AUTH_PASSWORD = "testmaster123"
-#DATABASE = "eval-simlekg"
 DATABASE = "simplekg"
 
-BASE_DIR = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\out_aktuell"
-)
-# BASE_DIR = Path(
-#     r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\triples"
-# )
+from pathlib import Path
 
-# Neo4j-Driver (DB wird über ENV oder default gewählt)
+import os
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+
+BASE_DIR_PATH = (
+    PROJECT_ROOT
+    / "main"
+    / "out_aktuell"
+)
+
+BASE_DIR  =  Path(os.getenv("ANSWERS_LOG_PATH", str(BASE_DIR_PATH))).expanduser().resolve()
+
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
 driver.verify_connectivity()
 
@@ -44,17 +47,17 @@ llm = OpenAILLM(
     model_params={"temperature": 0}
 )
 
-# Embedder für KG-Embeddings (für Knoten/Kanten)
+
 embedder = OpenAIEmbeddings(
     model="text-embedding-3-small"
 )
 
-# Komponente zum automatischen Schema-Extrahieren
+
 schema_extractor = SchemaFromTextExtractor(llm=llm)
 
 
 # ---------------------------------------------------------------------------
-# 2) Hilfsfunktionen: JSONL lesen
+# 2) Helpers
 # ---------------------------------------------------------------------------
 
 def iter_jsonl(path: Path):
@@ -68,7 +71,7 @@ def iter_jsonl(path: Path):
 
 
 # ---------------------------------------------------------------------------
-# 3) KG-Build für eine einzelne Zeile
+# 3) KG-Build
 # ---------------------------------------------------------------------------
 
 async def process_row(row: dict, kg_builder: SimpleKGPipeline, fallback_idx: int) -> bool:
@@ -84,22 +87,20 @@ async def process_row(row: dict, kg_builder: SimpleKGPipeline, fallback_idx: int
     file_name = (row.get("file_name") or "").strip()
     chunk_id = (row.get("chunk_id") or f"chunk_{fallback_idx}").strip()
 
-    # Metadaten für den Dokument-/Chunk-Knoten in Neo4j
+   
     document_metadata = {
         "file_name": file_name or "UNKNOWN_FILE",
         "chunk_id": chunk_id,
-        # optional weitere Felder, falls vorhanden:
+    
         "product": (row.get("product") or "").strip() or None,
         "product_category": (row.get("product_category") or "").strip() or None,
     }
 
-    # Aufruf der Pipeline:
-    # - text  -> Entitäten + Relationen extrahieren
-    # - document_metadata -> :Document / Chunk-Knoten mit diesen Properties
+
     await kg_builder.run_async(
         text=text,
         document_metadata=document_metadata,
-        # wichtig, wenn nicht Default-DB
+    
     )
 
     return True
@@ -110,21 +111,20 @@ async def process_row(row: dict, kg_builder: SimpleKGPipeline, fallback_idx: int
 # ---------------------------------------------------------------------------
 
 async def process_dir_async(base_dir: Path):
-    # 1) Schema einmalig aus dem Korpus extrahieren
-    #extracted_schema = await build_schema_from_corpus(base_dir)
+ 
 
-    # 2) Pipeline mit diesem Schema aufsetzen
+
     kg_builder = SimpleKGPipeline(
         llm=llm,
         driver=driver,
         embedder=embedder,
-       # schema=extracted_schema,   # automatisch extrahiertes Schema
+
         from_pdf=False,
         neo4j_database=DATABASE,
-        on_error="RAISE",          # für Debug; später ggf. "IGNORE"
+        on_error="RAISE",          #
     )
 
-    # 3) Alle *.jsonl-Dateien durchgehen
+
     files = sorted(base_dir.rglob("*.jsonl"))
     if not files:
         print(f"Keine .jsonl-Dateien in {base_dir} gefunden.")

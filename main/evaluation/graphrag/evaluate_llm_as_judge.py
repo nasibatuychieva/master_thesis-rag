@@ -53,13 +53,13 @@ VERBOSE = True
 PREVIEW_CHARS = 400
 
 # Faithfulness (milder defaults)
-FAITH_MAX_STATEMENTS = int(os.getenv("FAITH_MAX_STATEMENTS", "5"))  # was 7
+FAITH_MAX_STATEMENTS = int(os.getenv("FAITH_MAX_STATEMENTS", "5"))  
 MAX_CONTEXT_CHARS = int(os.getenv("FAITH_MAX_CONTEXT_CHARS", "12000"))
 EVIDENCE_ONLY = os.getenv("FAITH_EVIDENCE_ONLY", "1") == "1"
 
 # Helpfulness gating
-# final_helpfulness = raw_helpfulness01 * (HELP_GATE_BASE + (1-HELP_GATE_BASE) * faithfulness01)
-HELP_GATE_BASE = float(os.getenv("HELP_GATE_BASE", "0.5"))  # 0.5 means: at faith=0, keep 50% of raw helpfulness
+
+HELP_GATE_BASE = float(os.getenv("HELP_GATE_BASE", "0.5"))  
 
 
 # -----------------------------
@@ -139,7 +139,7 @@ if VERBOSE:
 
 API_KEY = os.getenv("OPENAI_API_KEY")
 if not API_KEY:
-    raise RuntimeError("OPENAI_API_KEY not found. Ensure .env is loaded or set the env var in your shell.")
+    raise RuntimeError("OPENAI_API_KEY not found")
 
 
 # -----------------------------
@@ -294,7 +294,7 @@ Return STRICT JSON only:
 {{"category":"TP|PARTIAL|FP|FN","coverage":<float>,"error_severity":"low|medium|high","justification":"<short>"}}
 """
 
-# Helpfulness / Utility prompt (NEW) -> produces 1..5
+
 HELPFULNESS_PROMPT = """
 You are evaluating the HELPFULNESS (utility) of a technical support answer.
 
@@ -321,7 +321,7 @@ Return STRICT JSON only:
 {{"helpfulness_1to5": <int>, "justification":"<short>"}}
 """
 
-# Statement generation prompt (keep lists intact; focus on evidence-bearing claims)
+
 GEN_STATEMENTS_PROMPT_V2 = """
 Given a question and answer, extract up to {max_statements} evidence-bearing atomic statements for faithfulness checking.
 
@@ -343,7 +343,7 @@ Return STRICT JSON only:
 {{"statements":["...","..."]}}
 """
 
-# MILDER verification prompt: prefer Partial over No when plausible / truncated context
+
 VERIFY_STATEMENTS_PROMPT_V2 = """
 Consider Context and the Statements. Determine whether each statement is supported by the context.
 
@@ -797,8 +797,7 @@ def eval_correctness(
 
 
 def aggregate_correctness(results: List[EvaluationResult]) -> Dict[str, float]:
-    # Update: include PARTIAL in the category set? For classic precision/recall you usually map PARTIAL -> FP or ignore.
-    # Here we will keep original behavior (TP/FP/TN/FN) but treat PARTIAL as FP for aggregation to avoid inflating TP.
+
     cats = []
     for r in results:
         c = str(r.metrics.get("correctness", {}).get("category", "")).upper()
@@ -822,7 +821,7 @@ def aggregate_correctness(results: List[EvaluationResult]) -> Dict[str, float]:
 
 
 # -----------------------------
-# Metric 4: Faithfulness (milder)
+# Metric 4: Faithfulness 
 # -----------------------------
 def eval_faithfulness(judge: LLMJudge, tc: TestCase) -> Dict[str, Any]:
     metric = "faithfulness"
@@ -903,7 +902,7 @@ def eval_faithfulness(judge: LLMJudge, tc: TestCase) -> Dict[str, Any]:
 
 
 # -----------------------------
-# Metric 5: Helpfulness (NEW) + faithfulness-gated final score
+# Metric 5: Helpfulness 
 # -----------------------------
 def eval_helpfulness(judge: LLMJudge, tc: TestCase, faithfulness_score01: float) -> Dict[str, Any]:
     metric = "helpfulness"
@@ -1058,9 +1057,15 @@ def aggregate_summary(results: List[EvaluationResult]) -> Dict[str, Any]:
 # Entry (JSONL)
 # -----------------------------
 def main() -> None:
-    JSONL_IN = Path(
-        r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\answers_log_new_dataset.jsonl"
+    PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+
+    ANSWERS_PATH = (
+    PROJECT_ROOT
+    / "main" / "evaluation" / "graphrag" / "answers_log_new_dataset.jsonl"
     )
+
+
+    JSONL_IN = Path(os.getenv("ANSWERS_LOG_PATH", str(ANSWERS_PATH))).expanduser().resolve()
 
     log("Reading input JSONL", path=str(JSONL_IN))
     data = load_jsonl(JSONL_IN)
@@ -1154,14 +1159,23 @@ def main() -> None:
 
     out_df = results_to_dataframe(results)
 
-    out_dir = Path(
-        r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\out"
-    )
+    PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+
+    JUDGE_PATH = (
+    PROJECT_ROOT
+    / "main"
+    / "evaluation"
+    / "graphrag"
+    /"out"
+    / "llm_judge_results_answers_log_new_dataset_rows_1_to_56_mild"
+)
+
+    out_dir = Path(os.getenv("ANSWERS_LOG_PATH", str(JUDGE_PATH))).expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     end_row_inclusive = end_idx
     JSONL_STEM = JSONL_IN.stem
-    CSV_OUT = out_dir / f"llm_judge_results_{JSONL_STEM}_rows_{start_row}_to_{end_row_inclusive}_mild_with_helpfulness.csv"
+    CSV_OUT = out_dir / f"llm_judge_results_{JSONL_STEM}_rows_{start_row}_to_{end_row_inclusive}.csv"
 
     log("Writing output CSV", path=str(CSV_OUT), n_rows=len(out_df))
     out_df.to_csv(CSV_OUT, index=False)

@@ -1,9 +1,3 @@
-# ============================================================================
-# ONLY_RAG_Sparse_Advanced
-# Retrieval-Augmented Generation (Neo4j FULLTEXT + LLM Rerank)
-# with FULL logging for LLM-as-a-Judge (faithfulness-ready)
-# ============================================================================
-
 import json
 from pathlib import Path
 from typing import Dict, List, Tuple, Any
@@ -29,11 +23,10 @@ AUTH_USER = os.getenv("NEO4J_USER_RAG")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD_RAG")
 DATABASE = "rag"
 
-# Your existing chunk setup
+
 NODE_LABEL = "Chunk"
 TEXT_PROPERTY = "text"
 
-# NEW: Fulltext index name (must exist in Neo4j)
 FULLTEXT_INDEX_NAME = "chunk_text_ft"
 
 SCRIPT_NAME = "RAG_Sparse_Advanced"
@@ -105,11 +98,11 @@ def _build_fulltext_query(pre: Dict[str, Any]) -> str:
       - Add extracted keywords as boosts
     Note: Keep it simple and robust for technical docs.
     """
-    # Basic tokenization (safe / minimal)
+    # Basic tokenization 
     base = pre["rewritten_query"].replace("\n", " ").strip()
     base_terms = [t.strip() for t in base.split(" ") if t.strip()]
 
-    # Keep terms reasonably sized to avoid junk queries
+   
     base_terms = [t for t in base_terms if len(t) >= 2]
 
     # OR-combine base terms
@@ -125,7 +118,7 @@ def _build_fulltext_query(pre: Dict[str, Any]) -> str:
     elif base_part:
         return f"({base_part})"
     else:
-        # fallback
+    
         return '"arduino"'
 
 def retrieve_chunks_sparse(pre: Dict[str, Any], k: int = 12) -> List[Document]:
@@ -160,7 +153,7 @@ def retrieve_chunks_sparse(pre: Dict[str, Any], k: int = 12) -> List[Document]:
             if not text:
                 continue
 
-            # copy all node properties into metadata (safe)
+            # copy all node properties into metadata 
             meta = dict(node)
             meta["sparse_score"] = float(score)
 

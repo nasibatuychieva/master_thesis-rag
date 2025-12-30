@@ -48,8 +48,8 @@ def process_pdf(pdf_path: Path, out_dir: Path, doc, chunker, tokenizer):
 
     category = pdf_path.parent.parent.name
     product  = pdf_path.parent.name
-    filename = pdf_path.stem  # Dateiname ohne .pdf
-    parts = filename.split("_")  # ["Elements", "Bluetooth", "Espressif", "ESP32-C3-MINI-1U"]
+    filename = pdf_path.stem  
+    parts = filename.split("_")  
     element = None
     if parts and parts[0] == "Elements":
         element = "_".join(parts[:2])
@@ -113,7 +113,7 @@ def iterate_product_docs(
     out_dir: Optional[Path] = None,
     doc=None, chunker=None, tokenizer=None
 ):
-    # Root/Default-Pfade nur setzen, wenn nichts übergeben wurde
+  
     if doc_root is None or out_dir is None:
         root = get_repo_root()
         parent_path = root.parent
@@ -122,18 +122,18 @@ def iterate_product_docs(
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # load tokenizer
+   
     tokenizer = tokenizer or return_tokenizer()
 
     for pdf_path in doc_root.rglob("*.html"):
-        # ensure pdf_path is a file
+     
         if not pdf_path.is_file():
             continue
 
         print(f"Start processing {pdf_path}")
         print(f"Start writing into {pdf_path.parent.parent.name} / {pdf_path.parent.name} / {pdf_path.name}")
         
-        #generate for each file doc 
+    
         doc = build_docling_from_html(pdf_path)
         chunker_for_doc = chunk_documents_with_docling(doc, tokenizer) if chunker is None else chunker
 

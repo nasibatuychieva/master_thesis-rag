@@ -51,8 +51,8 @@ def process_pdf(pdf_path: Path, out_dir: Path):
     
     category = pdf_path.parent.parent.name
     product  = pdf_path.parent.name
-    filename = pdf_path.stem  # Dateiname ohne .pdf
-    parts = filename.split("_")  # ["Elements", "Bluetooth", "Espressif", "ESP32-C3-MINI-1U"]
+    filename = pdf_path.stem  
+    parts = filename.split("_")  
     element = None
     if parts and parts[0] == "Elements":
         element = "_".join(parts[:2])
@@ -71,7 +71,7 @@ def process_pdf(pdf_path: Path, out_dir: Path):
 
     tokenizer = HuggingFaceTokenizer(
     tokenizer=AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2"),
-    max_tokens=260,    # an Max-Grenze
+    max_tokens=260,    
     )
     chunker = make_chunker(tokenizer)
     raw_chunks = list(chunker.chunk(dl_doc=doc_from_md))
@@ -87,14 +87,14 @@ def process_pdf(pdf_path: Path, out_dir: Path):
         parts = split_by_tokens(text_raw, tcount, target=220, maxlen=260)
         tight_chunks.extend(parts)
 
-    # === 4) Optional: winzige Fragmente verwerfen oder an Nachbar anhängen
+
 
     MIN_WORDS = 25
     final_chunks = []
     buf = ""
     for c in tight_chunks:
         if len(c.split()) < MIN_WORDS:
-        # hänge an vorherigen (falls vorhanden) an, ansonsten sammle
+
             if final_chunks:
                 final_chunks[-1] = final_chunks[-1] + " " + c
             else:
@@ -107,12 +107,7 @@ def process_pdf(pdf_path: Path, out_dir: Path):
     if buf:
         final_chunks.append(buf.strip())
 
-# # === 5) Kontrolle/Stats
-#     def tcount(x): return len(tokenizer.tok.encode(x, add_special_tokens=False))
-#     sizes = [tcount(c) for c in final_chunks]
-#     print(f"Chunks: {len(final_chunks)} | min/max/avg tokens: {min(sizes)}/{max(sizes)}/{sum(sizes)//len(sizes)}")
 
-# === 6) Export (Beispiel)
     section = None
     n_tokens = None
     semantic_density = None
@@ -133,7 +128,7 @@ def process_pdf(pdf_path: Path, out_dir: Path):
             "text": f"[Product: {product}] [Product category: {category}] [Element of {product}: {element}] [Tutorial about {product}: {tutorial}] \n\n{text_raw}",
     })
 
-    # === 2) HARTE NACHKONTROLLE: Alles, was trotzdem zu groß ist, erneut tokenbasiert splitten
+
 
 
 
@@ -148,7 +143,7 @@ def iterate_product_docs(
     out_dir: Optional[Path] = None,
    
 ):
-    # Root/Default-Pfade nur setzen, wenn nichts übergeben wurde
+
     if doc_root is None or out_dir is None:
         root = get_repo_root()
         parent_path = root.parent

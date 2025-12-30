@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # -----------------------------
-# FIXED CONFIG
+# CONFIG
 # -----------------------------
 import os
 
@@ -25,13 +25,13 @@ REL_IN_COMM = "IN_COMMUNITY"
 REL_FROM_CHUNK = "FROM_CHUNK"
 
 # LLM
-MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # set if you want
+MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  #
 client = OpenAI()
 
-# how much text we put into the LLM
+
 MAX_SNIPPETS_PER_COMMUNITY = 60
-SNIPPET_CHAR_LIMIT = 350         # truncate each chunk text
-FULL_CONTENT_CHAR_LIMIT = 40_000 # cap total to avoid context explosion
+SNIPPET_CHAR_LIMIT = 350        
+FULL_CONTENT_CHAR_LIMIT = 40_000 
 
 # writing
 WRITE_FULL_CONTENT = True
@@ -41,7 +41,7 @@ def _safe_text(s: Optional[str]) -> str:
     if not s:
         return ""
     s = s.strip()
-    # keep it single-line-ish
+    
     s = " ".join(s.split())
     return s
 
@@ -51,7 +51,7 @@ def _truncate(s: str, n: int) -> str:
     return s[:n] + "..."
 
 def fetch_community_ids(session) -> List[str]:
-    # Use elementId (Neo4j 5+ recommended)
+   
     rows = session.run(f"""
         MATCH (c:{COMM_LABEL})
         WHERE c.level = 1
@@ -61,7 +61,7 @@ def fetch_community_ids(session) -> List[str]:
     return [r["cid"] for r in rows]
 
 def fetch_snippets_for_community(session, comm_eid: str, limit: int) -> List[str]:
-    # Your chunks have property `text` (based on your diagnostics)
+  
     rows = session.run(f"""
         MATCH (e:{ENTITY_LABEL})-[:{REL_IN_COMM}]->(c:{COMM_LABEL})
         WHERE elementId(c) = $cid
@@ -137,7 +137,7 @@ def summarize_with_llm(full_content: str) -> Dict[str, Any]:
         obj["keywords"] = [str(x).strip() for x in obj["keywords"] if str(x).strip()]
         return obj
     except Exception:
-        # absolute fallback: store raw
+     
         return {"summary": "", "keywords": [], "raw": content}
 
 def write_results(session, comm_eid: str, full_content: str, llm_out: Dict[str, Any]):

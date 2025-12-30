@@ -23,9 +23,9 @@ AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "simplekg"
 
 MAX_WORKERS = 10
-MIN_NORM_LEN = 4  # Schutz gegen zu aggressive Normalisierung bei sehr kurzen Names
+MIN_NORM_LEN = 4  
 
-# Meta-Labels, die NICHT als "semantische Labels" zählen sollen
+
 META_LABELS = ["__Entity__", "__KGBuilder__"]
 
 graph = Neo4jGraph(
@@ -41,8 +41,7 @@ print("\n=== Connected to Neo4j Knowledge Graph ===\n")
 
 # -----------------------------------------------------------------------------
 # 1) Candidate Generation (STRICT numeric-safe + TOKENS) + dedupe
-#    -> basiert auf e.name, aber NUR innerhalb gleicher semantischer Label-Signatur
-#    FIX: groupKey für normTokens via apoc.text.join(...) statt toString(list)
+
 # -----------------------------------------------------------------------------
 candidate_query = f"""
 // ============================================================================
@@ -153,7 +152,7 @@ print("Duplicate candidate groups (deduped):", len(potential_duplicate_candidate
 
 # -----------------------------------------------------------------------------
 # 2) LLM-based grouping (structured output)
-#    -> LLM bekommt NUR Namen
+
 # -----------------------------------------------------------------------------
 system_prompt = """
 You are a data processing assistant. Your task is to identify duplicate entities based on their NAMES.
@@ -217,7 +216,7 @@ print("Duplicate merge groups (LLM output):", len(merged_name_groups))
 
 # -----------------------------------------------------------------------------
 # 4) Resolve merged NAME groups -> elementIds
-#    IMPORTANT: name may not be unique => we collect all matching nodes.
+
 # -----------------------------------------------------------------------------
 resolve_to_element_ids_query = """
 UNWIND $names AS name
@@ -240,13 +239,13 @@ for g in merged_name_groups:
     if len(eids) > 1:
         merge_groups_element_ids.append(eids)
 
-# Dedupe merge groups (same node sets can appear multiple times)
+
 merge_groups_element_ids = [list(x) for x in {tuple(sorted(g)) for g in merge_groups_element_ids}]
 print("Duplicate merge groups (elementId-based):", len(merge_groups_element_ids))
 
 
 # -----------------------------------------------------------------------------
-# 5) Merge in Neo4j (always merge by elementId)
+# 5) Merge in Neo4j 
 # -----------------------------------------------------------------------------
 merge_query = """
 UNWIND $data AS eids

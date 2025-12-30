@@ -8,7 +8,8 @@ load_dotenv()
 
 from langchain_openai import ChatOpenAI
 from langchain_core.documents import Document
-
+from pathlib import Path
+import os
 from langchain_community.graphs.neo4j_graph import Neo4jGraph
 from langchain_experimental.graph_transformers.llm import LLMGraphTransformer
 from langchain_community.graphs.graph_document import Node, Relationship
@@ -16,12 +17,12 @@ from langchain_community.graphs.graph_document import Node, Relationship
 # ------------------------------------------------------------------
 # Neo4j-Verbindung
 # ------------------------------------------------------------------
-URI = "neo4j://127.0.0.1:7687"
-AUTH_USER = "neo4j"
-#AUTH_PASSWORD = "testmaster123"
-# AUTH_USER = "neo4j"
-AUTH_PASSWORD = "master2025"
-#DATABASE = "eval-llmgraph"
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv())
+
+URI = os.getenv("NEO4J_URI")
+AUTH_USER = os.getenv("NEO4J_USER")
+AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "llmagraphtrkg"
 
 graph = Neo4jGraph(
@@ -34,7 +35,7 @@ graph = Neo4jGraph(
 print("\n=== Connected to Neo4j Knowledge Graph ===\n")
 
 # ------------------------------------------------------------------
-# Constraints (einmalig, optional – aber sehr sinnvoll)
+# Constraints 
 # ------------------------------------------------------------------
 graph.query("""
 CREATE CONSTRAINT doc_id IF NOT EXISTS
@@ -63,20 +64,23 @@ doc_transformer = LLMGraphTransformer(
     relationship_properties=["description"],
 )
 
-BASE_DIR = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\out_aktuell"
-)
-# BASE_DIR = Path(
-#     r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\triples"
-# )
 
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+
+BASE_DIR_PATH = (
+    PROJECT_ROOT
+    / "main"
+    / "out_aktuell"
+)
+
+BASE_DIR  =  Path(os.getenv("ANSWERS_LOG_PATH", str(BASE_DIR_PATH))).expanduser().resolve()
 # ------------------------------------------------------------------
 # 1) Chunks aus JSONL laden -> LangChain-Documents
 # ------------------------------------------------------------------
 def load_chunks_from_jsonl(base_dir: Path) -> List[Document]:
     docs: List[Document] = []
 
-    # passe das Pattern bei Bedarf an (z.B. "*.jsonl")
+
     for jsonl_path in base_dir.rglob("docling_chunks.jsonl"):
         with open(jsonl_path, "r", encoding="utf-8") as f:
             for line in f:
@@ -89,16 +93,15 @@ def load_chunks_from_jsonl(base_dir: Path) -> List[Document]:
                 if not text:
                     continue
 
-                # NEU: file_name und chunk_id aus der Zeile holen
+           
                 file_name = (row.get("file_name") or "").strip()
                 chunk_id = (row.get("chunk_id") or "").strip()
 
-                # Fallbacks, falls Felder fehlen
+              
                 if not file_name:
                     file_name = jsonl_path.name
                 if not chunk_id:
-                    # zur Not aus laufender Nummer o.ä. machen
-                    # hier nur ein einfacher Fallback
+                 
                     chunk_id = f"{file_name}_chunk"
 
                 metadata = {
@@ -123,7 +126,6 @@ def extract_graph_documents(docs: List[Document]):
 
 # ------------------------------------------------------------------
 # 3) GraphDocuments nach Neo4j schreiben
-#    -> Document-Knoten, Chunk-Knoten, Entity-Knoten, Relationen
 # ------------------------------------------------------------------
 def write_graph_to_neo4j(graph_docs):
     for gd in graph_docs:
@@ -163,7 +165,7 @@ def write_graph_to_neo4j(graph_docs):
             },
         )
 
-        # Chunk mit Document verknüpfen
+   
         graph.query(
             """
             MATCH (c:Chunk {id: $chunk_id}), (d:Document {id: $doc_id})
@@ -172,9 +174,6 @@ def write_graph_to_neo4j(graph_docs):
             {"chunk_id": chunk_id, "doc_id": doc_id},
         )
 
-        # -------------------------
-        # Entities aus gd.nodes
-        # -------------------------
         for n in gd.nodes:
             graph.query(
                 """
@@ -201,9 +200,7 @@ def write_graph_to_neo4j(graph_docs):
                 },
             )
 
-        # -------------------------
-        # Relationen zwischen Entities
-        # -------------------------
+
         for rel in gd.relationships:
             rel_type = rel.type or "RELATED_TO"
             rel_props = rel.properties or {}

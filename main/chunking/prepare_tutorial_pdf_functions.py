@@ -14,12 +14,12 @@ def ocr_pdf_with_tesseract(pdf_path: str, dpi: int = 300, lang: str = "eng") -> 
     doc = fitz.open(pdf_path)
     out = []
     for page in doc:
-        # 1) Normale Textschicht versuchen
+      
         txt = page.get_text("text").strip()
         if txt:
             out.append(txt)
             continue
-        # 2) Sonst OCR auf gerenderter Seite
+     
         pix = page.get_pixmap(dpi=dpi)
         mode = "RGB" if pix.n < 4 else "RGBA"
         img = Image.frombytes(mode, [pix.width, pix.height], pix.samples)
@@ -30,11 +30,11 @@ def ocr_pdf_with_tesseract(pdf_path: str, dpi: int = 300, lang: str = "eng") -> 
 
 # 2.1 Cleaning 
 def clean_html_extracted_pdf_text(t: str) -> str:
-        # >>>> ERSETZE bei Bedarf durch deine Version mit Ligaturen etc. <<<<
+     
         t = re.sub(r"(\w)-\n(\w)", r"\1\2", t)
         t = t.replace("\r", "")
         t = re.sub(r"[ \t]{2,}", " ", t)
-        # Navigations-/Müllzeilen optional herausfiltern
+   
         t = re.sub(r"^\s*(Go Back|ON THIS PAGE|Author.*|Last revision.*|Help|Arduino\s*Docs)\s*$",
                    "", t, flags=re.I|re.M)
         t = re.sub(r"\n{2,}", "\n", t)
@@ -61,13 +61,13 @@ def normalize_paragraphs(text: str) -> str:
 # 2) Heading
 def is_heading(line: str) -> bool:
     s = line.strip()
-    if not s or len(s.split()) < 2:  # mind. 2 Wörter
+    if not s or len(s.split()) < 2:  
         return False
     if len(s) > 80:
         return False
-    if any(ch in ".!?;:" for ch in s):  # keine Sätze mit Punkt etc.
+    if any(ch in ".!?;:" for ch in s):  
         return False
-    # grobe Heuristik: ALL CAPS oder Title Case
+ 
     return s.isupper() or s.istitle()
 
 # 3) Semantic Sections 
@@ -84,17 +84,17 @@ def split_into_sections_semantic(text: str):
             cur_buf.append(ln)
     if cur_buf:
         sections.append((cur_title, "\n".join(cur_buf).strip()))
-    # Fallback: all in one section
+
     return sections or [("", text.strip())]
 
-# Create Markdown for Docling-Import
+
 def to_markdown_from_sections(cleaned_text: str) -> str:
     md_lines = []
     for title, body in split_into_sections_semantic(cleaned_text):
         if title:
             md_lines.append(f"# {title}")
         md_lines.append(body)
-        md_lines.append("")  # Leerzeile
+        md_lines.append("")  
     return "\n".join(md_lines).strip()
 
 def clean_text(t: str) -> str:

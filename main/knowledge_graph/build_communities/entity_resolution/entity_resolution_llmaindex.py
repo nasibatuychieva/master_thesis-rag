@@ -27,12 +27,12 @@ AUTH_USER = os.getenv("NEO4J_USER")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "llmakg"  # <-- adjust if needed
 
-# Concurrency for LLM calls (keep low to avoid TPM rate limits)
+# Concurrency for LLM calls 
 MAX_WORKERS = 2
 
 # Candidate blocking params
 MIN_NORM_LEN = 4
-MAX_ENTITIES_PER_GROUP = 60  # cap LLM input size per group to reduce token usage
+MAX_ENTITIES_PER_GROUP = 60  
 
 # LLM retry
 MAX_RETRIES = 8
@@ -52,8 +52,7 @@ print("\n=== Connected to Neo4j Knowledge Graph ===\n")
 
 
 # =============================================================================
-# 1) CANDIDATE GENERATION (STRICT numeric-safe + TOKENS)
-#    NOTE: entityType removed because llmakg may not have it
+# 1) CANDIDATE GENERATION
 # =============================================================================
 candidate_query = f"""
 WITH {MIN_NORM_LEN} AS minLen
@@ -174,7 +173,7 @@ extraction_chain = extraction_prompt | extraction_llm
 
 
 def entity_resolution_with_retry(entities: List[str], max_retries: int = MAX_RETRIES) -> Optional[List[List[str]]]:
-    # Cap to reduce tokens per call
+
     if len(entities) > MAX_ENTITIES_PER_GROUP:
         entities = entities[:MAX_ENTITIES_PER_GROUP]
 
@@ -232,7 +231,7 @@ def group_ids_to_element_ids(group: List[str]) -> List[str]:
     eids: List[str] = []
     for r in rows:
         eids.extend(r.get("eids", []))
-    # dedupe but keep order
+
     return list(dict.fromkeys(eids))
 
 
@@ -249,7 +248,7 @@ print("Duplicate merge groups (elementId-based):", len(merge_groups_element_ids)
 
 # =============================================================================
 # 4b) OPTIONAL BUT IMPORTANT: MERGE OVERLAPPING GROUPS (UNION-FIND)
-#     This prevents "Node not found" during merging due to overlaps like (A,B) and (B,C).
+
 # =============================================================================
 class UnionFind:
     def __init__(self):
@@ -335,7 +334,7 @@ failed = 0
 print("\nMerging groups one-by-one (robust)...")
 for eids in tqdm(merge_groups_element_ids, desc="Merging", total=len(merge_groups_element_ids)):
     try:
-        # Re-match nodes in current graph state
+      
         res = graph.query(merge_one_group_query, params={"eids": eids})
         if res and res[0].get("merged") == 1:
             merged_ok += 1
