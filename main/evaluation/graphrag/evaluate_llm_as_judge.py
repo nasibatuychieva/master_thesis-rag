@@ -6,27 +6,20 @@ FULL VERSION (all metrics):
 - Completeness (single/multi)
 - Correctness (coverage-based TP/PARTIAL/FP/FN)
 - Faithfulness (improved for long contexts + list answers)
-- Helpfulness (NEW): utility-style rating (1–5) + faithfulness-gated final score
+- Helpfulness (utility-style rating 1–5 + faithfulness-gated final)
 
-MILD TUNING (this version):
-- Keeps internal scores in [0,1] for analysis, but ALSO outputs 1–5 mapped scores per metric.
-- Faithfulness is made milder via:
-  - More forgiving verdict scoring (Yes=1.0, Partial=0.75, No=0.25)
-  - Verification prompt prefers Partial over No for plausible / truncated-context cases
-  - Default FAITH_MAX_STATEMENTS lowered to 5 (can override via env)
+MILD + POSITIVE CONTEXT BIAS (this version):
+- Faithfulness is made "positive-evidence biased":
+  - "No" is used ONLY when context contradicts a claim or strongly implies it is false.
+  - For long/truncated contexts, prefer "Partial" when plausible.
+  - Optional Anchor-Focus: filter context to chunks that mention answer anchors (product names / key terms),
+    reducing false "No" due to truncation/noise.
+- Keeps internal scores in [0,1], plus 1–5 mapped scores.
+- Correctness outputs coverage + coverage_1to5.
 
-INPUT FORMAT (THIS VERSION):
-- Reads from a JSONL file (one JSON object per line) with structure like:
-  {
-    "script": "...",
-    "question_id": "...",
-    "query_type": "...",
-    "question": "...",
-    "answer": "...",
-    "gold_answer": "...",
-    "context_items": [{"content": "...", "metadata": {...}}, ...],
-    ...
-  }
+INPUT FORMAT:
+- Reads from a JSONL file (one JSON object per line) with keys:
+  script, question_id, query_type, question, answer, gold_answer, context_items [...]
 
 Run as a single .py file.
 """
@@ -53,14 +46,17 @@ VERBOSE = True
 PREVIEW_CHARS = 400
 
 # Faithfulness (milder defaults)
-FAITH_MAX_STATEMENTS = int(os.getenv("FAITH_MAX_STATEMENTS", "5"))  
+FAITH_MAX_STATEMENTS = int(os.getenv("FAITH_MAX_STATEMENTS", "5"))
 MAX_CONTEXT_CHARS = int(os.getenv("FAITH_MAX_CONTEXT_CHARS", "12000"))
 EVIDENCE_ONLY = os.getenv("FAITH_EVIDENCE_ONLY", "1") == "1"
 
+# NEW: Positive bias knobs
+FAITH_POSITIVE_BIAS = os.getenv("FAITH_POSITIVE_BIAS", "1") == "1"
+FAITH_USE_ANCHOR_FOCUS = os.getenv("FAITH_USE_ANCHOR_FOCUS", "1") == "1"
+FAITH_ANCHOR_MAX_CHUNKS = int(os.getenv("FAITH_ANCHOR_MAX_CHUNKS", "25"))
+
 # Helpfulness gating
-
-HELP_GATE_BASE = float(os.getenv("HELP_GATE_BASE", "0.5"))  
-
+HELP_GATE_BASE = float(os.getenv("HELP_GATE_BASE", "0.5"))
 
 # -----------------------------
 # Small logging
@@ -195,10 +191,10 @@ Expected answer (gold steps):
 {expected_steps}
 
 Task:
-- Identify procedural steps in the expected answer and in the actual answer.
-- Count total expected steps and total actual steps.
-- Count wrong steps and missing steps (semantic equivalence allowed).
-- Compute rates over expected steps.
+- Identify procedural steps/items in the expected answer and in the actual answer.
+- Count total expected steps/items and total actual steps/items.
+- Count wrong items and missing items (semantic equivalence allowed).
+- Compute rates over expected items.
 - Provide overall_completeness_score in [0,1].
 
 Return STRICT JSON with exactly these keys:
@@ -294,7 +290,6 @@ Return STRICT JSON only:
 {{"category":"TP|PARTIAL|FP|FN","coverage":<float>,"error_severity":"low|medium|high","justification":"<short>"}}
 """
 
-
 HELPFULNESS_PROMPT = """
 You are evaluating the HELPFULNESS (utility) of a technical support answer.
 
@@ -321,7 +316,6 @@ Return STRICT JSON only:
 {{"helpfulness_1to5": <int>, "justification":"<short>"}}
 """
 
-
 GEN_STATEMENTS_PROMPT_V2 = """
 Given a question and answer, extract up to {max_statements} evidence-bearing atomic statements for faithfulness checking.
 
@@ -333,31 +327,51 @@ Answer:
 
 Rules:
 - Focus only on claims that require support from context (facts, numbers, named items, "X uses Y", "steps", "causes").
-- DO NOT split long enumerations into many statements. If the answer lists many items (e.g., products), keep it as ONE statement:
-  Example: "Products: A, B, C, ...".
-- Ignore filler text (greetings, hedging, formatting).
-- If the answer is a meta-response (apology/no-info/refusal/request for more details), return exactly:
+- DO NOT split long enumerations into many statements. If the answer lists many items (e.g., products), keep it as ONE statement.
+- Ignore filler text.
+- If the answer is a meta-response, return exactly:
   {{"statements":["I am sorry."]}}
 
 Return STRICT JSON only:
 {{"statements":["...","..."]}}
 """
 
+# NEW: Anchor extraction prompt
+GEN_ANCHORS_PROMPT = """
+Extract up to {max_anchors} short "anchors" (keywords/phrases) that would likely appear in supporting context.
+These anchors are used to FILTER context, so prefer:
+- product names (e.g., "Nano ESP32", "GIGA R1 WiFi")
+- key terms (e.g., "USB-C", "DAC", "solid-state relay")
 
-VERIFY_STATEMENTS_PROMPT_V2 = """
+Question:
+{question}
+
+Answer:
+{answer}
+
+Rules:
+- Keep anchors short (1–5 tokens).
+- No duplicates.
+- Return STRICT JSON only:
+{{"anchors":["...","..."]}}
+"""
+
+# UPDATED: Verification prompt with positive-evidence bias
+VERIFY_STATEMENTS_PROMPT_V3 = """
 Consider Context and the Statements. Determine whether each statement is supported by the context.
 
 Verdicts:
 - "Yes": clearly supported by context (explicitly or unambiguously).
-- "Partial": broadly consistent with context, OR the core claim is supported but details are missing,
-  OR only some items in a list are supported, OR support is indirect but plausible from context.
-- "No": contradicted by context, OR clearly not supported (context suggests the opposite).
+- "Partial": broadly consistent with context OR plausible given partial/indirect evidence OR the core claim is supported but details are missing.
+- "No": use ONLY if the context CONTRADICTS the statement OR strongly implies the opposite.
 
-Rules:
-- If context is empty: return "Yes" only for "I am sorry.", otherwise "No".
-- When context is very long or truncated, prefer "Partial" over "No" if the claim seems plausible but not fully provable.
-- If a statement is a list of items and at least one item is supported, do not output "No" unless the context contradicts the list; prefer "Partial".
-- Provide a brief explanation per statement.
+IMPORTANT POSITIVE EVIDENCE BIAS:
+- When context is long, noisy, or truncated, DO NOT punish the answer for missing explicit wording.
+  Prefer "Partial" unless there is contradiction.
+- If a statement mentions named entities (products/terms) and those entities appear anywhere in the context,
+  that is evidence toward "Partial" rather than "No" (unless contradicted).
+- For lists: if at least one listed item is supported, output "Partial" (not "No") unless the context contradicts the list.
+- Only output "No" when you can point to contradictory wording or a clear mismatch.
 
 Context:
 {context}
@@ -451,16 +465,11 @@ def clamp01(x: float) -> float:
 
 
 def to_1_5(score01: float) -> int:
-    """
-    Map [0,1] -> {1,2,3,4,5} (rounded to nearest).
-    0.00 -> 1, 1.00 -> 5
-    """
     s = clamp01(float(score01))
     return int(round(1 + 4 * s))
 
 
 def score_1to5_to_01(s: int) -> float:
-    # 1 -> 0.0, 5 -> 1.0
     try:
         si = int(s)
     except Exception:
@@ -494,24 +503,21 @@ def normalize_context_items_from_jsonl(ctx_items: Any) -> List[Dict[str, str]]:
         return []
     if not isinstance(ctx_items, list):
         return []
-
     out: List[Dict[str, str]] = []
     for d in ctx_items:
         if not isinstance(d, dict):
             continue
         content = d.get("content") or d.get("page_content") or d.get("text") or ""
         md = d.get("metadata") if isinstance(d.get("metadata"), dict) else {}
-
         source = d.get("source") or md.get("source") or d.get("type") or d.get("node_type") or ""
         cid = d.get("id") or d.get("chunk_id") or md.get("id") or md.get("chunk_id") or ""
         score = d.get("score") or md.get("score") or ""
-
         out.append({"content": str(content), "source": str(source), "id": str(cid), "score": str(score)})
     return [x for x in out if x.get("content", "").strip()]
 
 
 # -----------------------------
-# Evidence-focused context builder for faithfulness
+# Evidence-focused context builder
 # -----------------------------
 _CHUNK_HEADER_RE = re.compile(r"^\[Chunk .*?\]$", flags=re.MULTILINE)
 
@@ -520,7 +526,6 @@ def extract_evidence_from_context(norm_ctx: List[Dict[str, str]]) -> str:
     contents = [(d.get("content") or "").strip() for d in (norm_ctx or []) if (d.get("content") or "").strip()]
     if not contents:
         return ""
-
     joined = "\n\n".join(contents)
 
     if "Evidence chunks:" in joined:
@@ -561,6 +566,28 @@ def truncate_context(text: str, max_chars: int) -> str:
     if tail == 0:
         return t[:max_chars] + " ...[truncated]"
     return t[:head] + "\n...[truncated]...\n" + t[-tail:]
+
+
+# NEW: Anchor-focused context filter to reduce false negatives
+def filter_context_by_anchors(norm_ctx: List[Dict[str, str]], anchors: List[str], max_chunks: int) -> List[Dict[str, str]]:
+    if not norm_ctx or not anchors:
+        return norm_ctx
+    a = [x.strip().lower() for x in anchors if isinstance(x, str) and x.strip()]
+    if not a:
+        return norm_ctx
+
+    hits: List[Dict[str, str]] = []
+    for d in norm_ctx:
+        txt = (d.get("content") or "").lower()
+        if any(k in txt for k in a):
+            hits.append(d)
+
+    # If nothing matched, fallback to original (don’t accidentally wipe context)
+    if not hits:
+        return norm_ctx
+
+    # Keep first max_chunks (usually context already roughly ranked)
+    return hits[: max(1, max_chunks)]
 
 
 # -----------------------------
@@ -628,7 +655,6 @@ def eval_answer_relevance(
 
     raw = judge.chat(GEN_QUESTION_PROMPT.format(answer=tc.answer, num_questions=num_questions), tag=f"{metric}:gen_questions")
     obj = _extract_first_json_object(raw)
-
     if not isinstance(obj, dict) or "questions" not in obj or not isinstance(obj["questions"], list):
         return {metric: {"score": 0.0, "reason": "Invalid question generation JSON", "raw": preview(raw, 800)}}
 
@@ -639,7 +665,6 @@ def eval_answer_relevance(
     vecs = judge.embed([tc.question] + questions, tag=f"{metric}:embeddings")
     r = vecs[0]
     sims = [cosine(r, v) for v in vecs[1:]]
-
     score_cont = float(np.mean(sims)) if sims else 0.0
     score_thr = float(sum(1 for s in sims if s >= similarity_threshold) / len(sims)) if sims else 0.0
     score_used = score_cont if aggregation == "continuous" else score_thr
@@ -724,7 +749,7 @@ def eval_completeness(judge: LLMJudge, tc: TestCase) -> Dict[str, Any]:
 
 
 # -----------------------------
-# Metric 3: Correctness (coverage-based) + coverage_1to5 (NEW)
+# Metric 3: Correctness
 # -----------------------------
 def eval_correctness(
     judge: LLMJudge,
@@ -737,16 +762,7 @@ def eval_correctness(
     if not tc.expected_steps or not tc.expected_steps.strip():
         raise ValueError("expected_steps (gold) must be provided for correctness.")
     if is_meta_response(tc.answer):
-        return {
-            metric: {
-                "category": "FN",
-                "coverage": 0.0,
-                "coverage_1to5": 1,
-                "error_severity": "low",
-                "justification": "Meta-response / no answer.",
-                "relaxed": relaxed,
-            }
-        }
+        return {metric: {"category": "FN", "coverage": 0.0, "coverage_1to5": 1, "error_severity": "low", "justification": "Meta-response / no answer.", "relaxed": relaxed}}
 
     raw = judge.chat(
         CORRECTNESS_PROMPT.format(
@@ -763,17 +779,7 @@ def eval_correctness(
     try:
         validated = _require_fields(obj, [("category", str), ("coverage", float), ("error_severity", str), ("justification", str)])
     except Exception as e:
-        return {
-            metric: {
-                "category": "FN",
-                "coverage": 0.0,
-                "coverage_1to5": 1,
-                "error_severity": "high",
-                "justification": f"Invalid judge JSON: {e}",
-                "raw": preview(raw, 1200),
-                "relaxed": relaxed,
-            }
-        }
+        return {metric: {"category": "FN", "coverage": 0.0, "coverage_1to5": 1, "error_severity": "high", "justification": f"Invalid judge JSON: {e}", "raw": preview(raw, 1200), "relaxed": relaxed}}
 
     cat = validated["category"].strip().upper()
     if cat not in {"TP", "PARTIAL", "FP", "FN"}:
@@ -788,7 +794,7 @@ def eval_correctness(
     out = dict(validated)
     out["category"] = cat
     out["coverage"] = cov
-    out["coverage_1to5"] = to_1_5(cov)  # NEW
+    out["coverage_1to5"] = to_1_5(cov)
     out["error_severity"] = sev
     out["relaxed"] = relaxed
     out["tp_cov"] = tp_cov if not relaxed else 0.60
@@ -797,7 +803,7 @@ def eval_correctness(
 
 
 def aggregate_correctness(results: List[EvaluationResult]) -> Dict[str, float]:
-
+    # treat PARTIAL as FP for precision/recall summary (optional)
     cats = []
     for r in results:
         c = str(r.metrics.get("correctness", {}).get("category", "")).upper()
@@ -821,12 +827,22 @@ def aggregate_correctness(results: List[EvaluationResult]) -> Dict[str, float]:
 
 
 # -----------------------------
-# Metric 4: Faithfulness 
+# Metric 4: Faithfulness (positive-evidence biased)
 # -----------------------------
 def eval_faithfulness(judge: LLMJudge, tc: TestCase) -> Dict[str, Any]:
     metric = "faithfulness"
 
     norm_ctx = tc.context or []
+
+    # Optional: anchor-focus to reduce truncation false negatives
+    anchors: List[str] = []
+    if FAITH_USE_ANCHOR_FOCUS and tc.answer and tc.answer.strip():
+        rawA = judge.chat(GEN_ANCHORS_PROMPT.format(question=tc.question, answer=tc.answer, max_anchors=10), tag=f"{metric}:gen_anchors")
+        objA = _extract_first_json_object(rawA)
+        if isinstance(objA, dict) and isinstance(objA.get("anchors"), list):
+            anchors = [str(x).strip() for x in objA["anchors"] if isinstance(x, str) and x.strip()][:10]
+            norm_ctx = filter_context_by_anchors(norm_ctx, anchors, FAITH_ANCHOR_MAX_CHUNKS)
+
     if EVIDENCE_ONLY:
         context_text = extract_evidence_from_context(norm_ctx)
     else:
@@ -841,9 +857,12 @@ def eval_faithfulness(judge: LLMJudge, tc: TestCase) -> Dict[str, Any]:
             evidence_only=EVIDENCE_ONLY,
             context_docs=len(norm_ctx),
             context_text_len=len(context_text),
+            anchor_focus=FAITH_USE_ANCHOR_FOCUS,
+            anchors=anchors[:8],
             context_text_preview=preview(context_text, 500),
         )
 
+    # Step 1: extract statements
     raw1 = judge.chat(
         GEN_STATEMENTS_PROMPT_V2.format(question=tc.question, answer=tc.answer, max_statements=FAITH_MAX_STATEMENTS),
         tag=f"{metric}:gen_statements_v2",
@@ -862,14 +881,15 @@ def eval_faithfulness(judge: LLMJudge, tc: TestCase) -> Dict[str, Any]:
     st_map = {str(i + 1): st for i, st in enumerate(statements)}
     st_block = "\n".join(f"{i}: {st}" for i, st in st_map.items())
 
-    raw2 = judge.chat(
-        VERIFY_STATEMENTS_PROMPT_V2.format(context=context_text, statements=st_block),
-        tag=f"{metric}:verify_v2",
-    )
+    # Step 2: verify statements (V3 prompt)
+    promptV = VERIFY_STATEMENTS_PROMPT_V3 if FAITH_POSITIVE_BIAS else VERIFY_STATEMENTS_PROMPT_V3
+    raw2 = judge.chat(promptV.format(context=context_text, statements=st_block), tag=f"{metric}:verify_v3")
     obj2 = _extract_first_json_object(raw2)
+
     if not isinstance(obj2, dict):
         return {metric: {"score": 0.0, "error": "Invalid verification JSON (not a dict)", "raw": preview(raw2, 1200)}}
 
+    # scoring: Yes=1, Partial=0.75, No=0.25
     verdict_score = {"yes": 1.0, "partial": 0.75, "no": 0.25}
 
     total = 0.0
@@ -879,7 +899,7 @@ def eval_faithfulness(judge: LLMJudge, tc: TestCase) -> Dict[str, Any]:
         if key not in st_map or not isinstance(judgement, dict) or "verdict" not in judgement:
             continue
         v = str(judgement["verdict"]).strip().lower()
-        sc = verdict_score.get(v, 0.25)
+        sc = verdict_score.get(v, 0.75 if FAITH_POSITIVE_BIAS else 0.25)
         total += sc
         if v != "yes":
             details.append({"statement": st_map[key], "judgement": judgement})
@@ -897,23 +917,23 @@ def eval_faithfulness(judge: LLMJudge, tc: TestCase) -> Dict[str, Any]:
             "max_context_chars": MAX_CONTEXT_CHARS,
             "faith_max_statements": FAITH_MAX_STATEMENTS,
             "verdict_scoring": {"Yes": 1.0, "Partial": 0.75, "No": 0.25},
+            "positive_bias": FAITH_POSITIVE_BIAS,
+            "anchor_focus": FAITH_USE_ANCHOR_FOCUS,
+            "anchor_max_chunks": FAITH_ANCHOR_MAX_CHUNKS,
+            "anchors_used": anchors,
         }
     }
 
 
 # -----------------------------
-# Metric 5: Helpfulness 
+# Metric 5: Helpfulness
 # -----------------------------
 def eval_helpfulness(judge: LLMJudge, tc: TestCase, faithfulness_score01: float) -> Dict[str, Any]:
     metric = "helpfulness"
-
     if not tc.answer or not tc.answer.strip():
         return {metric: {"helpfulness_raw_1to5": 1, "helpfulness_raw_score": 0.0, "helpfulness_final_score": 0.0, "helpfulness_final_1to5": 1, "justification": "Empty answer"}}
 
-    raw = judge.chat(
-        HELPFULNESS_PROMPT.format(question=tc.question, actual_answer=tc.answer),
-        tag=f"{metric}:judge",
-    )
+    raw = judge.chat(HELPFULNESS_PROMPT.format(question=tc.question, actual_answer=tc.answer), tag=f"{metric}:judge")
     obj = _extract_first_json_object(raw)
 
     try:
@@ -921,11 +941,9 @@ def eval_helpfulness(judge: LLMJudge, tc: TestCase, faithfulness_score01: float)
     except Exception as e:
         return {metric: {"helpfulness_raw_1to5": 1, "helpfulness_raw_score": 0.0, "helpfulness_final_score": 0.0, "helpfulness_final_1to5": 1, "justification": f"Invalid judge JSON: {e}", "raw": preview(raw, 1200)}}
 
-    h15 = int(validated["helpfulness_1to5"])
-    h15 = max(1, min(5, h15))
+    h15 = max(1, min(5, int(validated["helpfulness_1to5"])))
     raw01 = score_1to5_to_01(h15)
 
-    # Gate by faithfulness to avoid rewarding hallucinations too much
     f01 = clamp01(float(faithfulness_score01))
     base = max(0.0, min(1.0, HELP_GATE_BASE))
     final01 = clamp01(raw01 * (base + (1.0 - base) * f01))
@@ -1014,7 +1032,7 @@ def results_to_dataframe(results: List[EvaluationResult]) -> pd.DataFrame:
         corr = r.metrics.get("correctness", {})
         row["correctness_category"] = corr.get("category", None)
         row["correctness_coverage"] = corr.get("coverage", None)
-        row["correctness_coverage_1to5"] = corr.get("coverage_1to5", None)  # NEW
+        row["correctness_coverage_1to5"] = corr.get("coverage_1to5", None)
         row["correctness_error_severity"] = corr.get("error_severity", None)
 
         faith = r.metrics.get("faithfulness", {})
@@ -1043,11 +1061,6 @@ def aggregate_summary(results: List[EvaluationResult]) -> Dict[str, Any]:
         "faithfulness_mean": float(dfm["faithfulness_score"].mean()) if "faithfulness_score" in dfm else 0.0,
         "helpfulness_raw_mean": float(dfm["helpfulness_raw_score"].mean()) if "helpfulness_raw_score" in dfm else 0.0,
         "helpfulness_final_mean": float(dfm["helpfulness_final_score"].mean()) if "helpfulness_final_score" in dfm else 0.0,
-        "answer_relevance_1to5_mean": float(dfm["answer_relevance_1to5"].mean()) if "answer_relevance_1to5" in dfm else 0.0,
-        "completeness_1to5_mean": float(dfm["completeness_1to5"].mean()) if "completeness_1to5" in dfm else 0.0,
-        "faithfulness_1to5_mean": float(dfm["faithfulness_1to5"].mean()) if "faithfulness_1to5" in dfm else 0.0,
-        "helpfulness_raw_1to5_mean": float(dfm["helpfulness_raw_1to5"].mean()) if "helpfulness_raw_1to5" in dfm else 0.0,
-        "helpfulness_final_1to5_mean": float(dfm["helpfulness_final_1to5"].mean()) if "helpfulness_final_1to5" in dfm else 0.0,
     }
     summary.update(aggregate_correctness(results))
     return summary
@@ -1058,13 +1071,7 @@ def aggregate_summary(results: List[EvaluationResult]) -> Dict[str, Any]:
 # -----------------------------
 def main() -> None:
     PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
-
-    ANSWERS_PATH = (
-    PROJECT_ROOT
-    / "main" / "evaluation" / "graphrag" / "answers_log_new_dataset.jsonl"
-    )
-
-
+    ANSWERS_PATH = PROJECT_ROOT / "main" / "evaluation" / "graphrag" / "answers_log_new_dataset_trimmed.jsonl"
     JSONL_IN = Path(os.getenv("ANSWERS_LOG_PATH", str(ANSWERS_PATH))).expanduser().resolve()
 
     log("Reading input JSONL", path=str(JSONL_IN))
@@ -1104,39 +1111,19 @@ def main() -> None:
     )
 
     testcases: List[TestCase] = []
-    empty_context_qids: List[str] = []
-
     for obj in selected:
-        script = str(obj.get("script", ""))
-        qid = str(obj.get("question_id", ""))
-        qtype = str(obj.get("query_type", ""))
-        question = str(obj.get("question", ""))
-        answer = str(obj.get("answer", ""))
-        gold = str(obj.get("gold_answer", ""))
-
-        norm_ctx = normalize_context_items_from_jsonl(obj.get("context_items", []))
-        if len(norm_ctx) == 0:
-            empty_context_qids.append(qid)
-
         testcases.append(
             TestCase(
-                script=script,
-                question_id=qid,
-                query_type=qtype,
-                question=question,
-                answer=answer,
-                expected_steps=gold,
+                script=str(obj.get("script", "")),
+                question_id=str(obj.get("question_id", "")),
+                query_type=str(obj.get("query_type", "")),
+                question=str(obj.get("question", "")),
+                answer=str(obj.get("answer", "")),
+                expected_steps=str(obj.get("gold_answer", "")),
                 expected_causes=None,
-                context=norm_ctx,
+                context=normalize_context_items_from_jsonl(obj.get("context_items", [])),
             )
         )
-
-    log(
-        "Context load summary",
-        total=len(testcases),
-        empty_context_count=len(empty_context_qids),
-        empty_context_sample=empty_context_qids[:10],
-    )
 
     judge = LLMJudge(
         JudgeConfig(
@@ -1159,24 +1146,10 @@ def main() -> None:
 
     out_df = results_to_dataframe(results)
 
-    PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
-
-    JUDGE_PATH = (
-    PROJECT_ROOT
-    / "main"
-    / "evaluation"
-    / "graphrag"
-    /"out"
-    / "llm_judge_results_answers_log_new_dataset_rows_1_to_56_mild"
-)
-
-    out_dir = Path(os.getenv("ANSWERS_LOG_PATH", str(JUDGE_PATH))).expanduser().resolve()
+    out_dir = PROJECT_ROOT / "main" / "evaluation" / "graphrag" / "out"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    end_row_inclusive = end_idx
-    JSONL_STEM = JSONL_IN.stem
-    CSV_OUT = out_dir / f"llm_judge_results_{JSONL_STEM}_rows_{start_row}_to_{end_row_inclusive}.csv"
-
+    CSV_OUT = out_dir / f"llm_judge_results_{JSONL_IN.stem}_rows_{start_row}_to_{end_idx}.csv"
     log("Writing output CSV", path=str(CSV_OUT), n_rows=len(out_df))
     out_df.to_csv(CSV_OUT, index=False)
 

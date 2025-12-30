@@ -54,7 +54,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "graphrag"
-    / "golden_answers_dataset_short.jsonl"
+    / "golden_answers_dataset.jsonl"
 )
 
 # Chunk schema (Neo4j)
