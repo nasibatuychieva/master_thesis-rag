@@ -1,6 +1,10 @@
+from __future__ import annotations
+
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
 from dotenv import load_dotenv, find_dotenv
 from neo4j import GraphDatabase
 from langchain_openai import ChatOpenAI
@@ -8,42 +12,46 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from main.evaluation.logger import log_antwort
 
+
 # ---------------------------------------------------------------------------
-# 1) Config
+# 0) ENV & CONFIG
 # ---------------------------------------------------------------------------
 load_dotenv(find_dotenv())
-import os
 
 URI = os.getenv("NEO4J_URI")
 AUTH_USER = os.getenv("NEO4J_USER")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
-DATABASE = "llmagraphtrkg"
+DATABASE = os.getenv("NEO4J_DATABASE", "llmagraphtrkg")
 
 SCRIPT_NAME = "LLMGraph_Community_KG_Retriever"
 
-QUESTIONS_PATH = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\golden_answers_dataset_new.jsonl"
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", str(Path(__file__).resolve().parents[3]))).expanduser().resolve()
+QUESTIONS_PATH = (
+    PROJECT_ROOT / "main" / "evaluation" / "graphrag" / "golden_answers_dataset_new.jsonl"
 )
 
-MODEL = "gpt-4o-mini"
-LEVEL = 1
+MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+LEVEL = int(os.getenv("COMMUNITY_LEVEL", "1"))
 
-# batching to avoid token overflow
-BATCH_SIZE = 40  # 348 communities / 40 ≈ 9 batches
+# IMPORTANT: batch = nur Portionierung, NICHT droppen
+BATCH_SIZE = int(os.getenv("BATCH_SIZE", "8"))
 
-# ---------------------------------------------------------------------------
-# 2) Neo4j driver + LLM
-# ---------------------------------------------------------------------------
+# Hard limits, um Token-Explosion zu verhindern, ohne Communities wegzulassen
+MAX_CHARS_PER_COMMUNITY = int(os.getenv("MAX_CHARS_PER_COMMUNITY", "6000"))
+MAX_CHARS_PER_BATCH = int(os.getenv("MAX_CHARS_PER_BATCH", "60000"))
+
+# optional resume (falls es mitten drin crasht)
+START_BATCH = int(os.getenv("START_BATCH", "0"))
 
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
 driver.verify_connectivity()
 
 llm = ChatOpenAI(model=MODEL, temperature=0)
 
-# ---------------------------------------------------------------------------
-# 3) Cypher: fetch community summaries for a given level
-# ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# 1) Cypher: fetch community summaries for a given level
+# ---------------------------------------------------------------------------
 QUERY_COMMUNITIES = """
 MATCH (c:__Community__)
 WHERE c.level = $level
@@ -53,35 +61,36 @@ RETURN c.communityId AS cid, c.full_content AS txt
 ORDER BY cid
 """
 
-# ---------------------------------------------------------------------------
-# 4) Prompts (batch answering + final synthesis)
-# ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# 2) Prompts (batch answering + final synthesis)
+# ---------------------------------------------------------------------------
 BATCH_PROMPT = ChatPromptTemplate.from_messages([
     ("system",
      "You answer the question using ONLY the provided community summaries. "
-     "Synthesize across summaries. Do not invent facts. "
-     "If the summaries do not contain the answer, say what is missing."),
+     "Synthesize across summaries in THIS BATCH. Do not invent facts. "
+     "If this batch does not contain enough information, say what is missing."),
     ("user",
      "Question:\n{question}\n\n"
      "Community summaries (batch):\n{summaries}\n\n"
-     "Write a helpful partial answer grounded in this batch.")
+     "Write a grounded partial answer for this batch.")
 ])
 
 SYNTHESIS_PROMPT = ChatPromptTemplate.from_messages([
     ("system",
-     "Merge partial answers into one coherent final answer. "
-     "Remove duplicates, keep it structured, and stay faithful to the partial answers."),
+     "Merge the partial answers into one coherent final answer. "
+     "Remove duplicates, keep it structured, and stay faithful to the partial answers. "
+     "Do not introduce new facts not present in the partial answers."),
     ("user",
      "Question:\n{question}\n\n"
      "Partial answers:\n{partials}\n\n"
      "Return a single final answer.")
 ])
 
-# ---------------------------------------------------------------------------
-# 5) Logging helper 
-# ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# 3) Logging helper
+# ---------------------------------------------------------------------------
 def safe_log(
     script: str,
     question_id: str,
@@ -91,43 +100,34 @@ def safe_log(
     gold_answer: str,
     context_items: Optional[List[Dict[str, Any]]] = None,
 ):
-    try:
-        log_antwort(
-            script,
-            question_id,
-            query_type,
-            question,
-            answer,
-            gold_answer or "",
-            context_items=context_items,
-        )
-    except TypeError:
-        log_antwort(script, question_id, query_type, question, answer, gold_answer or "")
-    except Exception as e:
-        print("[WARN] logging failed:", e)
-        try:
-            log_antwort(script, question_id, query_type, question, answer, "")
-        except Exception:
-            log_antwort(script, "", "", question, answer, "")
+    # Einmal versuchen – und wenn es knallt, soll es sichtbar sein.
+    log_antwort(
+        script,
+        question_id,
+        query_type,
+        question,
+        answer,
+        gold_answer or "",
+        context_items=context_items,
+    )
 
 # ---------------------------------------------------------------------------
-# 6) Retrieval: get all community summaries for LEVEL
+# 4) Retrieval: load all communities (NO dropping)
 # ---------------------------------------------------------------------------
-
 def load_community_summaries(level: int) -> List[Dict[str, Any]]:
     with driver.session(database=DATABASE) as session:
         rows = session.run(QUERY_COMMUNITIES, level=level).data()
-    # rows: [{"cid":..., "txt":...}, ...]
     return rows
 
-# ---------------------------------------------------------------------------
-# 7) Answer generation: batched + final synthesis
-# ---------------------------------------------------------------------------
+
+def _truncate(s: str, max_chars: int) -> str:
+    s = (s or "")
+    if len(s) <= max_chars:
+        return s
+    return s[: max_chars - 3] + "..."
+
 
 def build_context_items(batch_rows: List[Dict[str, Any]], level: int) -> List[Dict[str, Any]]:
-    """
-    Turn community summaries used into a standardized context_items list for logging.
-    """
     items: List[Dict[str, Any]] = []
     for r in batch_rows:
         items.append({
@@ -137,10 +137,19 @@ def build_context_items(batch_rows: List[Dict[str, Any]], level: int) -> List[Di
             "score": "",
             "communityId": r.get("cid"),
             "level": level,
+            "type": "community_summary",
         })
     return items
 
-def answer_global(question: str, level: int = LEVEL, batch_size: int = BATCH_SIZE) -> Tuple[str, List[Dict[str, Any]]]:
+
+# ---------------------------------------------------------------------------
+# 5) Answer generation: process ALL communities sequentially in batches
+# ---------------------------------------------------------------------------
+def answer_global(
+    question: str,
+    level: int = LEVEL,
+    batch_size: int = BATCH_SIZE,
+) -> Tuple[str, List[Dict[str, Any]]]:
     rows = load_community_summaries(level=level)
     if not rows:
         return "No community summaries found for the requested level.", []
@@ -148,10 +157,25 @@ def answer_global(question: str, level: int = LEVEL, batch_size: int = BATCH_SIZ
     partials: List[str] = []
     all_context_items: List[Dict[str, Any]] = []
 
-    # Batch over summaries
-    for i in range(0, len(rows), batch_size):
+    total_batches = (len(rows) + batch_size - 1) // batch_size
+    print(f"[INFO] Communities loaded: {len(rows)} | batch_size={batch_size} | batches={total_batches}")
+
+    # Process ALL batches (no dropping)
+    for b in range(START_BATCH, total_batches):
+        i = b * batch_size
         batch_rows = rows[i:i + batch_size]
-        summaries_text = "\n\n---\n\n".join([br["txt"] for br in batch_rows])
+
+        # Per-community truncation (prevents single huge community from blowing up tokens)
+        texts = []
+        for br in batch_rows:
+            txt = br.get("txt", "") or ""
+            txt = _truncate(txt, MAX_CHARS_PER_COMMUNITY)
+            texts.append(txt)
+
+        summaries_text = "\n\n---\n\n".join(texts)
+        summaries_text = _truncate(summaries_text, MAX_CHARS_PER_BATCH)
+
+        print(f"[INFO] Batch {b+1}/{total_batches} | communities={len(batch_rows)} | chars={len(summaries_text)}")
 
         msg = llm.invoke(BATCH_PROMPT.format_messages(
             question=question,
@@ -161,10 +185,14 @@ def answer_global(question: str, level: int = LEVEL, batch_size: int = BATCH_SIZ
         if partial:
             partials.append(partial)
 
-        # log contexts that were actually used
+        # log contexts used in this batch (full original, NOT truncated, if you want keep as-is)
+        # If your logger grows too much, switch content to the truncated version above.
         all_context_items.extend(build_context_items(batch_rows, level=level))
 
     # Final synthesis
+    if not partials:
+        return "No partial answers produced. Possibly empty context.", all_context_items
+
     if len(partials) == 1:
         final_answer = partials[0]
     else:
@@ -176,13 +204,12 @@ def answer_global(question: str, level: int = LEVEL, batch_size: int = BATCH_SIZ
 
     return final_answer, all_context_items
 
-# ---------------------------------------------------------------------------
-# 8) Batch runner (JSONL)
-# ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# 6) Batch runner (JSONL)
+# ---------------------------------------------------------------------------
 def run_batch_from_file():
     print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
-
     if not QUESTIONS_PATH.exists():
         print("[ERROR] Dataset not found:", QUESTIONS_PATH)
         return
@@ -199,8 +226,8 @@ def run_batch_from_file():
                 continue
 
             question_id = obj.get("id") or obj.get("question_id") or obj.get("query_id") or ""
-            query_type  = obj.get("query_type") or ""
-            question    = obj.get("question") or ""
+            query_type = obj.get("query_type") or ""
+            question = obj.get("question") or ""
             gold_answer = obj.get("gold_answer") or ""
 
             if not question:
@@ -208,7 +235,12 @@ def run_batch_from_file():
 
             print(f"[QID {question_id}] [{query_type}] {question}")
 
-            answer, context_items = answer_global(question, level=LEVEL, batch_size=BATCH_SIZE)
+            try:
+                answer, context_items = answer_global(question, level=LEVEL, batch_size=BATCH_SIZE)
+            except Exception as e:
+                print("[ERROR] answering failed:", e)
+                answer = f"ERROR during answering: {e}"
+                context_items = []
 
             print(f"[ANSWER]\n{answer}\n")
             print(f"[CTX] n_context={len(context_items)} (community summaries)\n")
@@ -225,13 +257,13 @@ def run_batch_from_file():
 
     print("\n[INFO] Batch processing completed.\n")
 
-# ---------------------------------------------------------------------------
-# 9) Manual mode
-# ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# 7) Manual mode
+# ---------------------------------------------------------------------------
 def manual_question():
     qid = input("Question ID (optional): ").strip()
-    qtype = input("Query type (optional, e.g., factual/relational/summary): ").strip()
+    qtype = input("Query type (optional): ").strip()
     question = input("Question: ").strip()
     gold_answer = input("Gold Answer (optional): ").strip()
 
@@ -254,13 +286,14 @@ def manual_question():
         context_items=context_items,
     )
 
+
 def main_loop():
-    print(f"{SCRIPT_NAME} | Level={LEVEL} | Model={MODEL}")
+    print(f"{SCRIPT_NAME} | DB={DATABASE} | Level={LEVEL} | Model={MODEL}")
+    print(f"BATCH_SIZE={BATCH_SIZE} | MAX_CHARS_PER_COMMUNITY={MAX_CHARS_PER_COMMUNITY} | MAX_CHARS_PER_BATCH={MAX_CHARS_PER_BATCH}")
     print("Type 'exit' to quit.\n")
 
     while True:
         mode = input("Manual question? (y/n, or 'exit'): ").strip().lower()
-
         if mode in ("exit", "quit", "q"):
             break
         elif mode in ("y", "yes"):
@@ -269,6 +302,7 @@ def main_loop():
             run_batch_from_file()
         else:
             print("Please enter 'y', 'n', or 'exit'.\n")
+
 
 if __name__ == "__main__":
     try:

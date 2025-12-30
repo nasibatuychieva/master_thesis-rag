@@ -1,5 +1,5 @@
-prodct_names =
-[
+prodct_names:
+{
   "GIGA R1 WiFi",
   "Braccio Carrier",
   "Mega 2560 Rev3",
@@ -51,9 +51,9 @@ prodct_names =
   "Nano Screw Terminal Adapter",
   "Nano Matter",
   "Nano R4"
-]
-category_names =
-[
+}
+category_names:
+{
   "Mega",
   "Education",
   "Kits",
@@ -64,5 +64,5 @@ category_names =
   "Opta Family",
   "Pro Solutions Kits",
   "Nano Family"
-]
+}
 

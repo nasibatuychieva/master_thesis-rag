@@ -24,9 +24,9 @@ load_dotenv(find_dotenv())
 
 import os
 
-URI = os.getenv("NEO4J_URI")
-AUTH_USER = os.getenv("NEO4J_USER")
-AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
+URI = os.getenv("NEO4J_URI_RAG")
+AUTH_USER = os.getenv("NEO4J_USER_RAG")
+AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD_RAG")
 DATABASE = "rag"
 
 # Your existing chunk setup
@@ -38,9 +38,19 @@ FULLTEXT_INDEX_NAME = "chunk_text_ft"
 
 SCRIPT_NAME = "RAG_Sparse_Advanced"
 
-QUESTIONS_PATH = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\golden_answers_dataset_new.jsonl"
+from pathlib import Path
+import os
+
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+
+QUESTIONS_PATH = (
+    PROJECT_ROOT
+    / "main"
+    / "evaluation"
+    / "graphrag"
+    / "golden_answers_dataset_new.jsonl"
 )
+
 
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
 driver.verify_connectivity()

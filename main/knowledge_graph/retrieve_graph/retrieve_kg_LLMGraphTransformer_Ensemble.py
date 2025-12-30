@@ -1,23 +1,18 @@
-from __future__ import annotations
-
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv, find_dotenv
 from neo4j import GraphDatabase
 
 from neo4j_graphrag.embeddings.openai import OpenAIEmbeddings
-from neo4j_graphrag.retrievers import HybridCypherRetriever
-
 from langchain_openai import ChatOpenAI
 
 from main.evaluation.logger import log_antwort
 
-
 # ---------------------------------------------------------------------------
-# 1) Config & Environment
+# 1) Config
 # ---------------------------------------------------------------------------
 load_dotenv(find_dotenv())
 
@@ -28,9 +23,19 @@ AUTH_USER = os.getenv("NEO4J_USER")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "llmagraphtrkg"
 
-SCRIPT_NAME = "LLMGraph_Hybrid_Retriever_Rerank_Answer"
+VECTOR_INDEX = "chunkEmbedding_llmagraphtrkg"
+FULLTEXT_INDEX = "chunkFulltext_llmagraphtrkg"
+
+
+COMMUNITY_VECTOR_INDEX  = "community_vec"
+
+
+COMMUNITY_LABEL = "__Community__"
+
+SCRIPT_NAME = "LLMGraph_Hybrid_KG_Retriever_Rerank"
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+
 QUESTIONS_PATH = (
     PROJECT_ROOT
     / "main"
@@ -39,64 +44,16 @@ QUESTIONS_PATH = (
     / "golden_answers_dataset.jsonl"
 )
 
-# Retrieval (candidate pool vs final context)
-CANDIDATE_K = 60         # how many candidates to fetch from HybridCypherRetriever
-RERANK_TOP_K = 8         # how many chunks remain after rerank
-MAX_CONTEXT_CHARS = 12000
-
-# Neo4j index names
-VECTOR_INDEX_NAME = "chunkEmbedding_llmagraphtrkg"
-FULLTEXT_INDEX_NAME = "chunkFulltext_llmagraphtrkg"
-
-# Driver
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
 driver.verify_connectivity()
 
-# Embedder for vector search
 embedder = OpenAIEmbeddings(model="text-embedding-3-small")
 
-# LLMs
 llm_rerank = ChatOpenAI(model=os.getenv("OPENAI_MODEL"), temperature=0, max_tokens=1200)
 llm_answer = ChatOpenAI(model=os.getenv("OPENAI_MODEL"), temperature=0, max_tokens=1200)
 
-
 # ---------------------------------------------------------------------------
-# 2) Retrieval query (MATCHES YOUR SCHEMA!)
-# ---------------------------------------------------------------------------
-retrieval_query = """
-WITH node, score
-
-// Optional: entities mentioned by the chunk
-OPTIONAL MATCH (node)-[:MENTIONS]->(e)
-WHERE e IS NOT NULL AND NOT e:Chunk
-
-WITH node, score,
-     collect(DISTINCT coalesce(e.name, e.id, e.entity_id, elementId(e))) AS entities
-
-RETURN DISTINCT
-  coalesce(node.id, elementId(node)) AS chunk_id,
-  coalesce(node.text, "")            AS text,
-  coalesce(node.file_name, "")       AS file_name,
-  score                              AS score,
-  entities                           AS entities,
-  CASE
-    WHEN node.file_name IS NULL OR node.file_name = "" THEN []
-    ELSE [node.file_name]
-  END AS documents
-"""
-
-# Hybrid retriever (Vector + Fulltext)
-retriever = HybridCypherRetriever(
-    driver,
-    vector_index_name=VECTOR_INDEX_NAME,
-    fulltext_index_name=FULLTEXT_INDEX_NAME,
-    neo4j_database=DATABASE,
-    embedder=embedder,
-    retrieval_query=retrieval_query,
-)
-
-# ---------------------------------------------------------------------------
-# 3) Logging helper
+# 2) Logging helper
 # ---------------------------------------------------------------------------
 def safe_log(
     script: str,
@@ -118,74 +75,253 @@ def safe_log(
     )
 
 # ---------------------------------------------------------------------------
-# 4) Lucene escape (safe for fulltext)
+# 3) Fulltext-safe query builder
 # ---------------------------------------------------------------------------
-LUCENE_SPECIAL = r'(\+|\-|\&\&|\|\||\!|\(|\)|\{|\}|\[|\]|\^|"|~|\*|\?|\:|\\|\/)'
+_LUCENE_BAD = re.compile(r'[\+\-\!\(\)\{\}\[\]\^"~\*\?:\\\/]|&&|\|\|')
 
-def lucene_escape(s: str) -> str:
-    s = re.sub(r"\s+", " ", (s or "").strip())
-    s = re.sub(LUCENE_SPECIAL, r"\\\1", s)
-    return s
+def build_fulltext_query(question: str, *, max_terms: int = 18) -> str:
+    q = (question or "").strip()
+    if not q:
+        return ""
+
+    q = _LUCENE_BAD.sub(" ", q)
+    q = re.sub(r"\s+", " ", q).strip()
+
+    tokens = []
+    for t in q.split(" "):
+        tt = t.strip()
+        if len(tt) < 3:
+            continue
+        if tt.isdigit():
+            continue
+        tokens.append(tt)
+
+    seen = set()
+    uniq = []
+    for t in tokens:
+        low = t.lower()
+        if low in seen:
+            continue
+        uniq.append(t)
+        seen.add(low)
+
+    uniq = uniq[:max_terms]
+    if not uniq:
+        return ""
+
+    return " OR ".join(uniq)
 
 # ---------------------------------------------------------------------------
-# 5) Call retriever robustly (versions differ)
+# 4) HYBRID + COMMUNITY retrieval (Vector + Fulltext + Community Fulltext)
 # ---------------------------------------------------------------------------
-def _call_retriever(query_text: str, top_k: int):
-    """
-    HybridCypherRetriever API differs between versions.
-    Try common method names/signatures.
-    """
-    if hasattr(retriever, "search"):
-        try:
-            return retriever.search(query_text=query_text, top_k=top_k)
-        except TypeError:
-            return retriever.search(query_text, top_k=top_k)
 
-    if hasattr(retriever, "retrieve"):
-        try:
-            return retriever.retrieve(query_text=query_text, top_k=top_k)
-        except TypeError:
-            return retriever.retrieve(query_text, top_k=top_k)
+HYBRID_QUERY = """
+CALL () {
+  // VECTOR (Chunk)
+  CALL db.index.vector.queryNodes($vector_index, $k_vec, $qvec)
+  YIELD node, score
+  RETURN elementId(node) AS eid, score AS score, 'vec' AS src
 
-    raise RuntimeError("HybridCypherRetriever has no search/retrieve method in this version.")
+  UNION ALL
 
-def retrieve_candidates(question: str, top_k: int) -> List[Dict[str, Any]]:
-    """
-    Returns list[dict] candidates from retrieval_query:
-      chunk_id, text, file_name, score, entities, documents
-    """
-    q = lucene_escape(question)
-    results = _call_retriever(q, top_k=top_k)
+  // FULLTEXT (Chunk)
+  CALL db.index.fulltext.queryNodes($fulltext_index, $qtext, {limit: $k_ft})
+  YIELD node, score
+  RETURN elementId(node) AS eid, score AS score, 'ft' AS src
 
-    if not results:
+  UNION ALL
+
+  // VECTOR (Community)
+  CALL db.index.vector.queryNodes($community_vector_index, $k_comm, $qvec)
+  YIELD node, score
+  RETURN elementId(node) AS eid, score AS score, 'comm' AS src
+}
+RETURN eid, score, src
+"""
+
+POST_QUERY = f"""
+UNWIND $rows AS row
+MATCH (n) WHERE elementId(n) = row.eid
+WITH n, row.score AS score, row.src AS src
+
+CALL (n, score, src) {{
+  // Branch 1: Community -> Entity -> Chunk
+  WITH n, score, src
+  WITH n, score, src
+  WHERE src = 'comm' AND $community_label IN labels(n)
+  MATCH (n)-[:IN_COMMUNITY]-(e)
+  WHERE e IS NOT NULL AND NOT e:Chunk
+  MATCH (e)-[:MENTIONS]-(ch:Chunk)
+  RETURN ch AS node, score * 0.95 AS sub_score
+
+  UNION
+
+  // Branch 2: vec/ft -> already Chunk
+  WITH n, score, src
+  WITH n, score, src
+  WHERE src <> 'comm'
+  RETURN n AS node, score AS sub_score
+}}
+
+WITH node, sub_score AS score
+WHERE node:Chunk
+
+OPTIONAL MATCH (node)-[:MENTIONS]-(e2)
+WHERE e2 IS NOT NULL AND NOT e2:Chunk
+
+WITH node, score,
+     collect(DISTINCT coalesce(e2.name, e2.id, elementId(e2))) AS entities
+
+RETURN DISTINCT
+  coalesce(node.id, elementId(node)) AS chunk_id,
+  coalesce(node.text, "")            AS text,
+  coalesce(node.file_name, "")       AS file_name,
+  score                              AS score,
+  entities                           AS entities
+ORDER BY score DESC
+"""
+
+
+def retrieve_candidates_manual_hybrid(
+    question: str,
+    *,
+    candidate_k: int = 60,
+    k_comm: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    q_original = (question or "").strip()
+    if not q_original:
         return []
 
-    # neo4j_graphrag typically returns list[dict]
-    if isinstance(results, list):
-        out: List[Dict[str, Any]] = []
-        for r in results:
-            if not isinstance(r, dict):
-                continue
-            txt = str(r.get("text") or "").strip()
-            if not txt:
-                continue
-            out.append({
-                "chunk_id": str(r.get("chunk_id") or ""),
-                "text": txt,
-                "file_name": str(r.get("file_name") or ""),
-                "score": float(r.get("score") or 0.0),
-                "entities": r.get("entities", []) or [],
-                "documents": r.get("documents", []) or [],
-            })
-        return out
+    qvec = embedder.embed_query(q_original)
 
-    # fallback
-    s = str(results).strip()
-    return [{"chunk_id": "", "text": s, "file_name": "", "score": 0.0, "entities": [], "documents": []}] if s else []
+    qtext = build_fulltext_query(q_original)
+    if not qtext:
+        qtext = _LUCENE_BAD.sub(" ", q_original)
+        qtext = re.sub(r"\s+", " ", qtext).strip()
 
+    k_vec = max(10, candidate_k)
+    k_ft  = max(10, candidate_k)
+    k_comm = max(10, (k_comm if k_comm is not None else candidate_k))
+
+    # 1) Raw hybrid (vec/ft/comm)
+    try:
+        with driver.session(database=DATABASE) as session:
+            raw = session.run(
+                HYBRID_QUERY,
+                vector_index=VECTOR_INDEX,
+                fulltext_index=FULLTEXT_INDEX,
+                community_vector_index=COMMUNITY_VECTOR_INDEX,
+                k_vec=k_vec,
+                k_ft=k_ft,
+                k_comm=k_comm,
+                qvec=qvec,
+                qtext=qtext,
+            ).data()
+    except Exception as e:
+   
+        print("[WARN] Hybrid query with community failed, fallback to vec+ft only:", e)
+
+        HYBRID_QUERY_NO_COMM = """
+        CALL {
+          CALL db.index.vector.queryNodes($vector_index, $k_vec, $qvec)
+          YIELD node, score
+          RETURN elementId(node) AS eid, score AS score, 'vec' AS src
+
+          UNION ALL
+
+          CALL db.index.fulltext.queryNodes($fulltext_index, $qtext, {limit: $k_ft})
+          YIELD node, score
+          RETURN elementId(node) AS eid, score AS score, 'ft' AS src
+        }
+        RETURN eid, score, src
+        """
+        with driver.session(database=DATABASE) as session:
+            raw = session.run(
+                HYBRID_QUERY_NO_COMM,
+                vector_index=VECTOR_INDEX,
+                fulltext_index=FULLTEXT_INDEX,
+                k_vec=k_vec,
+                k_ft=k_ft,
+                qvec=qvec,
+                qtext=qtext,
+            ).data()
+
+    if not raw:
+        print("[DEBUG] hybrid raw returned 0 rows")
+        return []
+
+
+    vec_scores = [r["score"] for r in raw if r.get("src") == "vec" and isinstance(r.get("score"), (int, float))]
+    ft_scores  = [r["score"] for r in raw if r.get("src") == "ft"  and isinstance(r.get("score"), (int, float))]
+    comm_scores = [r["score"] for r in raw if r.get("src") == "comm" and isinstance(r.get("score"), (int, float))]
+
+    vec_max = max(vec_scores) if vec_scores else 1.0
+    ft_max  = max(ft_scores)  if ft_scores  else 1.0
+    comm_max = max(comm_scores) if comm_scores else 1.0
+
+    merged: Dict[str, float] = {}
+    merged_src: Dict[str, str] = {}
+
+    for r in raw:
+        eid = r.get("eid")
+        score = r.get("score", 0.0)
+        src = r.get("src")
+
+        if not eid:
+            continue
+        if not isinstance(score, (int, float)):
+            score = 0.0
+
+        if src == "vec":
+            score_norm = float(score) / float(vec_max) if vec_max else 0.0
+        elif src == "ft":
+            score_norm = float(score) / float(ft_max) if ft_max else 0.0
+        else:
+            score_norm = float(score) / float(comm_max) if comm_max else 0.0
+
+        prev = merged.get(eid, 0.0)
+        if score_norm > prev:
+            merged[eid] = score_norm
+            merged_src[eid] = src or "unknown"
+
+    rows = [{"eid": eid, "score": sc, "src": merged_src.get(eid, "unknown")} for eid, sc in merged.items()]
+    rows.sort(key=lambda x: x["score"], reverse=True)
+    rows = rows[:candidate_k]
+
+    print(
+        "[DEBUG] hybrid+community",
+        f"qtext='{qtext[:120]}'",
+        f"raw_rows={len(raw)}",
+        f"merged_unique={len(merged)}",
+        f"topk={len(rows)}",
+    )
+
+
+    with driver.session(database=DATABASE) as session:
+        out = session.run(
+        POST_QUERY,
+        rows=rows,
+        community_label=COMMUNITY_LABEL,
+        ).data()
+
+
+    candidates: List[Dict[str, Any]] = []
+    for r in out:
+        text = (r.get("text") or "").strip()
+        if not text:
+            continue
+        candidates.append({
+            "chunk_id": str(r.get("chunk_id") or ""),
+            "file_name": str(r.get("file_name") or ""),
+            "score": float(r.get("score") or 0.0),
+            "entities": r.get("entities", []) or [],
+            "text": text,
+        })
+
+    return candidates
 
 # ---------------------------------------------------------------------------
-# 6) Rerank (LLM-based)
+# 5) Rerank + Answer
 # ---------------------------------------------------------------------------
 def _truncate(s: str, max_chars: int) -> str:
     s = (s or "").strip()
@@ -195,7 +331,7 @@ def rerank_candidates(question: str, candidates: List[Dict[str, Any]], rerank_to
     if not candidates:
         return []
 
-    show_n = min(len(candidates), 25)  # keep rerank prompt bounded
+    show_n = min(len(candidates), 25)
     blocks: List[str] = []
     for i in range(show_n):
         c = candidates[i]
@@ -203,12 +339,12 @@ def rerank_candidates(question: str, candidates: List[Dict[str, Any]], rerank_to
             f"[DOC {i}] chunk_id={c.get('chunk_id','')} file={c.get('file_name','')} score={c.get('score','')}\n"
             f"{_truncate(c.get('text',''), 1200)}"
         )
+
     joined_blocks = "\n\n".join(blocks)
 
     prompt = (
         "You are a reranker for technical Arduino documentation QA.\n"
-        "Select documents that contain DIRECT evidence for the question.\n"
-        "Prefer documents that explicitly mention product names, ranges, specs, variants, lists, or constraints.\n\n"
+        "Select documents that contain DIRECT evidence for the question.\n\n"
         f"Question:\n{question}\n\n"
         f"Candidate documents:\n{joined_blocks}\n\n"
         f"Return ONLY a comma-separated list of the {rerank_top_k} most relevant DOC indices "
@@ -237,14 +373,9 @@ def rerank_candidates(question: str, candidates: List[Dict[str, Any]], rerank_to
 
     return [candidates[i] for i in uniq[:rerank_top_k]]
 
-
-# ---------------------------------------------------------------------------
-# 7) Build context + Answer (LLM)
-# ---------------------------------------------------------------------------
 def build_context(selected: List[Dict[str, Any]], *, max_total_chars: int = 12000) -> str:
-    parts: List[str] = []
+    parts = []
     total = 0
-
     for i, c in enumerate(selected, start=1):
         header = (
             f"Result {i}\n"
@@ -269,14 +400,13 @@ def build_context(selected: List[Dict[str, Any]], *, max_total_chars: int = 1200
 def answer_question(
     question: str,
     *,
-    candidate_k: int = CANDIDATE_K,
-    rerank_top_k: int = RERANK_TOP_K,
+    candidate_k: int = 60,
+    rerank_top_k: int = 8,
 ) -> Tuple[str, List[Dict[str, Any]]]:
-
-    candidates = retrieve_candidates(question, top_k=candidate_k)
+    candidates = retrieve_candidates_manual_hybrid(question, candidate_k=candidate_k)
     selected = rerank_candidates(question, candidates, rerank_top_k=rerank_top_k)
 
-    context = build_context(selected, max_total_chars=MAX_CONTEXT_CHARS)
+    context = build_context(selected, max_total_chars=12000)
     print(f"[DEBUG] candidates={len(candidates)} selected={len(selected)} context_chars={len(context)}")
 
     answer_prompt = (
@@ -291,35 +421,29 @@ def answer_question(
 
         f"Context:\n{context}\n\n"
         f"Question:\n{question}\n"
-        "{query_text}\n\n"
-        "Answer:\n"
     )
+
 
     answer = (llm_answer.invoke(answer_prompt).content or "").strip()
 
-    # ------------------------------------------------------------
-    # Logging: context must be the CHUNK TEXT, node_type='Chunk'
-    # ------------------------------------------------------------
+    # Kontext logging: Chunk-Text ist content
     context_items: List[Dict[str, Any]] = []
     for c in selected:
         context_items.append({
             "id": c.get("chunk_id", ""),
             "source": c.get("file_name", ""),
-            "score": c.get("score", 0.0),
+            "score": c.get("score", ""),
             "entities": c.get("entities", []),
-            "documents": c.get("documents", []),
-            "file_name": c.get("file_name", ""),
             "node_type": "Chunk",
-            "content": c.get("text", ""),   # <-- chunk text
+            "content": c.get("text", ""),
         })
 
     return answer, context_items
 
-
 # ---------------------------------------------------------------------------
-# 8) Batch / Manual
+# 6) Batch / Manual
 # ---------------------------------------------------------------------------
-def run_batch_from_file(candidate_k: int = CANDIDATE_K, rerank_top_k: int = RERANK_TOP_K):
+def run_batch_from_file(candidate_k: int = 60, rerank_top_k: int = 8):
     print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
     if not QUESTIONS_PATH.exists():
         print("[ERROR] golden_answers_dataset.jsonl not found.")
@@ -366,7 +490,7 @@ def run_batch_from_file(candidate_k: int = CANDIDATE_K, rerank_top_k: int = RERA
 
     print("\n[INFO] Batch processing completed.\n")
 
-def manual_question(candidate_k: int = CANDIDATE_K, rerank_top_k: int = RERANK_TOP_K):
+def manual_question(candidate_k: int = 60, rerank_top_k: int = 8):
     qid = input("Question ID (optional): ").strip()
     qtype = input("Query type (optional): ").strip()
     question = input("Question: ").strip()
@@ -396,19 +520,17 @@ def manual_question(candidate_k: int = CANDIDATE_K, rerank_top_k: int = RERANK_T
     )
 
 def main_loop():
-    print("HybridCypherRetriever (Vector+Fulltext) + LLM Rerank + LLM Answer")
+    print("Manual Hybrid (Vector + Fulltext + Community) + LLM Rerank + Answer")
     print("Type 'exit' to quit.\n")
-    print(f"DB={DATABASE} | VEC_INDEX={VECTOR_INDEX_NAME} | FT_INDEX={FULLTEXT_INDEX_NAME}")
-    print(f"CANDIDATE_K={CANDIDATE_K} | RERANK_TOP_K={RERANK_TOP_K} | MAX_CONTEXT_CHARS={MAX_CONTEXT_CHARS}\n")
 
     while True:
         mode = input("Manual question? (y/n, or 'exit'): ").strip().lower()
         if mode in ("exit", "quit", "q"):
             break
         elif mode in ("y", "yes"):
-            manual_question()
+            manual_question(candidate_k=60, rerank_top_k=8)
         elif mode in ("n", "no"):
-            run_batch_from_file()
+            run_batch_from_file(candidate_k=60, rerank_top_k=8)
         else:
             print("Please enter 'y', 'n', or 'exit'.\n")
 

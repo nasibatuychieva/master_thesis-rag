@@ -35,7 +35,7 @@ driver.verify_connectivity()
 
 # LLM für Schema + KG-Build
 llm = OpenAILLM(
-    model_name="gpt-4o-mini",
+    model_name=os.getenv("OPENAI_MODEL"),
     model_params={"temperature": 0}
 )
 

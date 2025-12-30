@@ -2,7 +2,8 @@ from dotenv import load_dotenv, find_dotenv
 from pathlib import Path
 import json
 from typing import Any, Dict, List, Optional, Tuple
-
+from pathlib import Path
+import os
 from llama_index.graph_stores.neo4j import Neo4jPGStore
 from llama_index.core import PropertyGraphIndex
 from llama_index.embeddings.openai import OpenAIEmbedding
@@ -13,26 +14,30 @@ from llama_index.core.indices.property_graph import (
     PGRetriever,
 )
 
-from main.evaluation.logger import log_antwort  # expects context_items kwarg in your new logger
-
-# ---------------------------------------------------------------------------
-# 1) Konfiguration
-# ---------------------------------------------------------------------------
-
+from main.evaluation.logger import log_antwort  
 load_dotenv(find_dotenv())
+# ---------------------------------------------------------------------------
+# 1) Config
+# ---------------------------------------------------------------------------
 
 embed_model = OpenAIEmbedding(model="text-embedding-3-small")
-llm = OpenAI(model="gpt-4o-mini", temperature=0)
+llm = OpenAI(model=os.getenv("OPENAI_MODEL"), temperature=0, max_tokens=1200)
 
-username = "neo4j"
-password = "master2025"
-uri = "neo4j://127.0.0.1:7687"
-database = "llmakg"
-
+username = os.getenv("NEO4J_USER")
+password =os.getenv("NEO4J_PASSWORD")
+uri = os.getenv("NEO4J_URI")
+database=  "llmakg"
 SCRIPT_NAME = "LlamaIndex_Vector_KG_Retriever"
 
-QUESTIONS_PATH = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\golden_answers_dataset_new.jsonl"
+
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+
+QUESTIONS_PATH = (
+    PROJECT_ROOT
+    / "main"
+    / "evaluation"
+    / "graphrag"
+    / "golden_answers_dataset.jsonl"
 )
 
 # ---------------------------------------------------------------------------
@@ -73,43 +78,154 @@ pg_retriever = PGRetriever(
 )
 
 # ---------------------------------------------------------------------------
-# 4) Helper: Logging (mit context_items)
+# 4) Helper: Logging 
 # ---------------------------------------------------------------------------
 
 def safe_log(
     script: str,
-    question_id: Optional[str],
-    query_type: Optional[str],
+    question_id: str,
+    query_type: str,
     question: str,
     answer: str,
-    gold_answer: Optional[str],
+    gold_answer: str,
     context_items: Optional[List[Dict[str, Any]]] = None,
 ):
-    """
-    Unified logging helper with backward-compatible fallback if logger signature differs.
-    """
-    try:
-        log_antwort(
-            script,
-            question_id,
-            query_type,
-            question,
-            answer,
-            gold_answer or "",
-            context_items=context_items,
-        )
-    except TypeError:
-        # older logger without context_items kwarg
-        log_antwort(script, question_id, query_type, question, answer, gold_answer or "")
-    except Exception:
-        # absolute fallback
-        try:
-            log_antwort(script, question_id, query_type, question, answer, "")
-        except Exception:
-            log_antwort(script, "", "", question, answer, "")
+   
+    log_antwort(
+        script,
+        question_id,
+        query_type,
+        question,
+        answer,
+        gold_answer or "",
+        context_items=context_items,
+    )
 
 # ---------------------------------------------------------------------------
-# 5) Helper: Answer with PG-Retriever (returns answer + context_items)
+# 5) Helpers: Extract content, metadata, id, score, type, source
+# ---------------------------------------------------------------------------
+
+def _extract_chunk_text(result_obj: Any) -> str:
+    """
+    Best-effort extraction of *Chunk node text* for logging + prompting.
+
+    Priority:
+      1) result_obj.node.text (TextNode / chunk)
+      2) result_obj.node.get_content(metadata_mode="none")
+      3) result_obj.get_content(metadata_mode="none") / get_content()
+      4) str(result_obj)
+    """
+    # 1) NodeWithScore-like objects
+    node = getattr(result_obj, "node", None)
+    if node is not None:
+        txt = getattr(node, "text", None)
+        if isinstance(txt, str) and txt.strip():
+            return txt.strip()
+
+        # sometimes content is accessible via get_content()
+        try:
+            node_content = node.get_content(metadata_mode="none")  
+            if isinstance(node_content, str) and node_content.strip():
+                return node_content.strip()
+        except Exception:
+            pass
+
+        try:
+            node_content = node.get_content() 
+            if isinstance(node_content, str) and node_content.strip():
+                return node_content.strip()
+        except Exception:
+            pass
+
+    # 2) Direct get_content on result object
+    try:
+        c = result_obj.get_content(metadata_mode="none")  
+        if isinstance(c, str) and c.strip():
+            return c.strip()
+    except Exception:
+        pass
+
+    try:
+        c = result_obj.get_content()  
+        if isinstance(c, str) and c.strip():
+            return c.strip()
+    except Exception:
+        pass
+
+    # 3) Last resort
+    s = str(result_obj or "").strip()
+    return s
+
+def _extract_metadata_dict(result_obj: Any) -> Dict[str, Any]:
+    """
+    Try to find metadata dict on result or result.node.
+    """
+    meta = getattr(result_obj, "metadata", None)
+    if isinstance(meta, dict):
+        return meta
+
+    node = getattr(result_obj, "node", None)
+    meta2 = getattr(node, "metadata", None) if node is not None else None
+    if isinstance(meta2, dict):
+        return meta2
+
+    return {}
+
+def _extract_node_id(result_obj: Any) -> str:
+    """
+    Best-effort id extraction (result id or underlying node id).
+    """
+    for attr in ("id_", "id", "node_id", "ref_doc_id"):
+        try:
+            v = getattr(result_obj, attr, None)
+            if v is not None and str(v).strip():
+                return str(v).strip()
+        except Exception:
+            pass
+
+    node = getattr(result_obj, "node", None)
+    if node is not None:
+        for attr in ("id_", "id", "node_id", "ref_doc_id"):
+            try:
+                v = getattr(node, attr, None)
+                if v is not None and str(v).strip():
+                    return str(v).strip()
+            except Exception:
+                pass
+
+    return ""
+
+def _extract_score(result_obj: Any) -> Any:
+    try:
+        return getattr(result_obj, "score", "")
+    except Exception:
+        return ""
+
+def _infer_node_type(meta: Dict[str, Any], default: str = "chunk") -> str:
+    """
+    Provide something meaningful for logger's context_types_json.
+    """
+    # common keys depending on how you stored nodes
+    for k in ("node_type", "label", "labels", "type", "__label__", "entity_type"):
+        v = meta.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+        if isinstance(v, list) and v:
+            return str(v[0])
+    return default
+
+def _infer_source(meta: Dict[str, Any]) -> str:
+    return (
+        meta.get("source")
+        or meta.get("file_name")
+        or meta.get("document")
+        or meta.get("doc_id")
+        or meta.get("ref_doc_id")
+        or ""
+    )
+
+# ---------------------------------------------------------------------------
+# 6) Helper: Answer with PG-Retriever (returns answer + context_items)
 # ---------------------------------------------------------------------------
 
 def answer_with_pg_retriever(question: str) -> Tuple[str, List[Dict[str, Any]]]:
@@ -119,71 +235,42 @@ def answer_with_pg_retriever(question: str) -> Tuple[str, List[Dict[str, Any]]]:
     context_lines: List[str] = []
 
     for r in results or []:
-        # Best-effort content extraction
-        try:
-            content = r.get_content()
-        except Exception:
-            content = str(r)
-
+       
+        content = _extract_chunk_text(r)
         content = (content or "").strip()
         if not content:
             continue
 
-        # Best-effort id / score / source extraction
-        rid = ""
-        score: Any = ""
-        source = ""
+        meta = _extract_metadata_dict(r)
+        rid = _extract_node_id(r)
+        score = _extract_score(r)
+        source = _infer_source(meta)
+        node_type = _infer_node_type(meta, default="chunk")
 
-        try:
-            rid = getattr(r, "id_", "") or getattr(r, "id", "") or ""
-        except Exception:
-            rid = ""
+        context_items.append(
+            {
+                "content": content,      # <- chunk text
+                "source": source,
+                "id": str(rid),
+                "score": score,
+                "node_type": node_type,  # <- enables context_types_json
+            }
+        )
 
-        try:
-            score = getattr(r, "score", "")
-        except Exception:
-            score = ""
-
-        # Some LlamaIndex nodes store metadata on r or r.node
-        meta = None
-        try:
-            meta = getattr(r, "metadata", None)
-        except Exception:
-            meta = None
-
-        if meta is None:
-            try:
-                node = getattr(r, "node", None)
-                meta = getattr(node, "metadata", None) if node is not None else None
-            except Exception:
-                meta = None
-
-        if isinstance(meta, dict):
-            source = (
-                meta.get("source")
-                or meta.get("file_name")
-                or meta.get("document")
-                or meta.get("doc_id")
-                or ""
-            )
-
-        context_items.append({
-            "content": content,
-            "source": source,
-            "id": str(rid),
-            "score": score,
-        })
-
+    
         context_lines.append(f"- {content}")
 
-    # If nothing retrieved, log explicit marker for judge/debug
+   
     if not context_items:
-        context_items = [{
-            "content": "[NO CONTEXT RETURNED BY PG_RETRIEVER]",
-            "source": "system",
-            "id": "",
-            "score": "",
-        }]
+        context_items = [
+            {
+                "content": "[NO CONTEXT RETURNED BY PG_RETRIEVER]",
+                "source": "system",
+                "id": "",
+                "score": "",
+                "node_type": "system",
+            }
+        ]
         context = context_items[0]["content"]
     else:
         context = "\n".join(context_lines)
@@ -203,14 +290,14 @@ Final answer:
     return answer, context_items
 
 # ---------------------------------------------------------------------------
-# 6) Batch Mode (JSONL)
+# 7) Batch Mode (JSONL)
 # ---------------------------------------------------------------------------
 
 def run_batch_from_file():
     print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
 
     if not QUESTIONS_PATH.exists():
-        print("[ERROR] golden_answers_dataset_new.jsonl not found.")
+        print("[ERROR] golden_answers_dataset.jsonl not found.")
         return
 
     with QUESTIONS_PATH.open("r", encoding="utf-8") as f:
@@ -251,7 +338,7 @@ def run_batch_from_file():
     print("\n[INFO] Batch processing completed.\n")
 
 # ---------------------------------------------------------------------------
-# 7) Manual Mode
+# 8) Manual Mode
 # ---------------------------------------------------------------------------
 
 def manual_question():
@@ -279,7 +366,7 @@ def manual_question():
     )
 
 # ---------------------------------------------------------------------------
-# 8) Main Loop
+# 9) Main Loop
 # ---------------------------------------------------------------------------
 
 def main_loop():

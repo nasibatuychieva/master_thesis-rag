@@ -40,7 +40,7 @@ PROJECT_ROOT = _guess_project_root()
 
 # Default output: JSONL file (append)
 DEFAULT_LOGFILE = (
-    PROJECT_ROOT / "main" / "evaluation" / "graphrag" / "answers_log_new_dataset.jsonl"
+    PROJECT_ROOT / "main" / "evaluation" / "graphrag" / "answers_log_new_dataset2.jsonl"
 )
 
 # allow override

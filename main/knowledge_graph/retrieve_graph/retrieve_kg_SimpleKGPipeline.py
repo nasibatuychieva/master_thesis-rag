@@ -6,10 +6,10 @@ from dotenv import load_dotenv, find_dotenv
 from neo4j import GraphDatabase
 
 from neo4j_graphrag.embeddings.openai import OpenAIEmbeddings
-from neo4j_graphrag.retrievers import VectorCypherRetriever, HybridCypherRetriever
+from neo4j_graphrag.retrievers import VectorCypherRetriever
 from neo4j_graphrag.llm import OpenAILLM
 from neo4j_graphrag.generation import GraphRAG
-
+from neo4j_graphrag.generation import RagTemplate
 from main.evaluation.logger import log_antwort
 
 # ---------------------------------------------------------------------------
@@ -27,9 +27,19 @@ DATABASE = "simplekg"
 
 SCRIPT_NAME = "SimpleKG_Vector_KG_Retriever"
 
-QUESTIONS_PATH = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\golden_answers_dataset_new.jsonl"
+from pathlib import Path
+import os
+
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+
+QUESTIONS_PATH = (
+    PROJECT_ROOT
+    / "main"
+    / "evaluation"
+    / "graphrag"
+    / "golden_answers_dataset.jsonl"
 )
+
 
 # Neo4j-Driver
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
@@ -37,7 +47,7 @@ driver.verify_connectivity()
 
 # LLM (Answer Generation)
 llm = OpenAILLM(
-    model_name="gpt-4o-mini",
+    model_name=os.getenv("OPENAI_MODEL"),
     model_params={"temperature": 0},
 )
 
@@ -89,7 +99,27 @@ retriever = VectorCypherRetriever(
     retrieval_query=retrieval_query,
 )
 
-rag = GraphRAG(retriever=retriever, llm=llm)
+prompt_template = RagTemplate(
+    template=(
+        "You are a technical support assistant.\n"
+        "Answer the question using ONLY the provided context.\n"
+        "Write a detailed, structured answer.\n"
+        "- If the question asks for variants, list all variants.\n"
+        "- Include key specs, ranges, and differences.\n"
+        "- Use bullet points and short headings.\n"
+        "If context is insufficient, say what is missing.\n\n"
+        "Examples:\n"
+        "{examples}\n\n"
+        "Context:\n"
+        "{context}\n\n"
+        "Question:\n"
+        "{query_text}\n\n"
+        "Answer:\n"
+    )
+)
+
+
+rag = GraphRAG(retriever=retriever, llm=llm,prompt_template=prompt_template)
 
 # ---------------------------------------------------------------------------
 # 3) Logging helper (context_items wird übergeben)
@@ -104,34 +134,25 @@ def safe_log(
     gold_answer: str,
     context_items: Optional[List[Dict[str, Any]]] = None,
 ):
-    try:
-        log_antwort(
-            script,
-            question_id,
-            query_type,
-            question,
-            answer,
-            gold_answer,
-            context_items=context_items,
-        )
-    except TypeError:
-        # logger supports old signature
-        log_antwort(script, question_id, query_type, question, answer, gold_answer)
-    except Exception as e:
-        print("[WARN] logging failed:", e)
-        try:
-            log_antwort(script, question_id, query_type, question, answer, "")
-        except Exception:
-            log_antwort(script, "", "", question, answer, "")
+
+    log_antwort(
+        script,
+        question_id,
+        query_type,
+        question,
+        answer,
+        gold_answer or "",
+        context_items=context_items,
+    )
 
 # ---------------------------------------------------------------------------
-# 4) Context retrieval (LlamaIndex-style): call retriever directly
+# 4) Context retrieval: call retriever directly
 # ---------------------------------------------------------------------------
 
 def retrieve_context_items(question: str, top_k: int = 20) -> List[Dict[str, Any]]:
     """
     Retrieve context directly from VectorCypherRetriever (not from GraphRAG response).
-    This is the reliable way to always have context for faithfulness evaluation.
+    We log ONLY the chunk text (node.text) as content.
     """
     results = None
 
@@ -151,55 +172,32 @@ def retrieve_context_items(question: str, top_k: int = 20) -> List[Dict[str, Any
 
     context_items: List[Dict[str, Any]] = []
 
-    # Expected: list[dict] from retrieval_query RETURN
+
     if isinstance(results, list):
         for r in results:
             if isinstance(r, dict):
+                # ✅ ONLY chunk text
                 text = str(r.get("text") or "").strip()
                 if not text:
                     continue
 
-                categories = r.get("categories", [])
-                products_in_category = r.get("products_in_category", [])
-                local_products = r.get("local_products", [])
-                entities = r.get("entities", [])
                 score = r.get("score", "")
 
-                # Build a richer "content" string that your judge can use
-                meta_lines = []
-                if categories:
-                    meta_lines.append(f"Categories: {categories}")
-                if local_products:
-                    meta_lines.append(f"Local products: {local_products}")
-                if products_in_category:
-                    meta_lines.append(f"Products in category: {products_in_category}")
-                if entities:
-                    meta_lines.append(f"Entities: {entities}")
-
-                enriched_text = text
-                if meta_lines:
-                    enriched_text = text + "\n" + "\n".join(meta_lines)
-
                 context_items.append({
-                    "content": enriched_text,
+                    "content": text,  
                     "source": "simplekg_vector_index",
-                    "id": "",          # no chunk_id returned in your query
                     "score": score,
-                    "categories": categories,
-                    "local_products": local_products,
-                    "products_in_category": products_in_category,
-                    "entities": entities,
                 })
             else:
                 s = str(r).strip()
                 if s:
-                    context_items.append({"content": s, "source": "simplekg_vector_index", "id": "", "score": ""})
+                    context_items.append({"content": s, "source": "simplekg_vector_index", "score": ""})
 
     else:
-        # Unexpected shape -> best-effort
+
         s = str(results).strip()
         if s:
-            context_items.append({"content": s, "source": "simplekg_retriever_raw", "id": "", "score": ""})
+            context_items.append({"content": s, "source": "simplekg_retriever_raw", "score": ""})
 
     return context_items
 
@@ -215,19 +213,17 @@ def answer_with_graphrag(question: str, top_k: int = 20) -> Tuple[str, List[Dict
     response = rag.search(
         query_text=question,
         retriever_config={"top_k": top_k},
-        # return_context=True  # optional, but we do NOT depend on it
+ 
     )
     answer = (getattr(response, "answer", None) or "").strip()
 
-    # 🔥 reliable context
+
     context_items = retrieve_context_items(question, top_k=top_k)
 
-    # If still empty, keep explicit marker (for debugging + judge transparency)
     if not context_items:
         context_items = [{
             "content": "[NO CONTEXT RETURNED BY RETRIEVER]",
             "source": "system",
-            "id": "",
             "score": "",
         }]
 
@@ -241,7 +237,7 @@ def run_batch_from_file(top_k: int = 20):
     print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
 
     if not QUESTIONS_PATH.exists():
-        print("[ERROR] golden_answers_dataset_new.jsonl not found.")
+        print("[ERROR] golden_answers_dataset.jsonl not found.")
         return
 
     with QUESTIONS_PATH.open("r", encoding="utf-8") as f:
@@ -277,7 +273,7 @@ def run_batch_from_file(top_k: int = 20):
                 question,
                 answer,
                 gold_answer,
-                context_items=context_items,   #  pass context
+                context_items=context_items,
             )
 
     print("\n[INFO] Batch processing completed.\n")

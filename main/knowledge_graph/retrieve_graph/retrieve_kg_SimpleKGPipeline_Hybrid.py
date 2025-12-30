@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import re
 from dotenv import load_dotenv, find_dotenv
 from neo4j import GraphDatabase
-
+from neo4j_graphrag.generation import RagTemplate
 from neo4j_graphrag.embeddings.openai import OpenAIEmbeddings
 from neo4j_graphrag.retrievers import VectorCypherRetriever, HybridCypherRetriever
 from neo4j_graphrag.llm import OpenAILLM
@@ -26,9 +26,17 @@ AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "simplekg"
 
 SCRIPT_NAME = "SimpleKG_Hybrid_KG_Retriever"
+from pathlib import Path
+import os
 
-QUESTIONS_PATH = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\golden_answers_dataset_new.jsonl"
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+
+QUESTIONS_PATH = (
+    PROJECT_ROOT
+    / "main"
+    / "evaluation"
+    / "graphrag"
+    / "golden_answers_dataset.jsonl"
 )
 
 # Neo4j-Driver
@@ -37,7 +45,7 @@ driver.verify_connectivity()
 
 # LLM (Answer Generation)
 llm = OpenAILLM(
-    model_name="gpt-4o-mini",
+    model_name=os.getenv("OPENAI_MODEL"),
     model_params={"temperature": 0},
 )
 
@@ -84,7 +92,7 @@ LUCENE_SPECIAL = r'(\+|\-|\&\&|\|\||\!|\(|\)|\{|\}|\[|\]|\^|"|~|\*|\?|\:|\\|\/)'
 
 def lucene_escape(s: str) -> str:
     s = re.sub(r"\s+", " ", s.strip())
-    s = re.sub(LUCENE_SPECIAL, r"\\\1", s)  # slash "/" wird zu "\/"
+    s = re.sub(LUCENE_SPECIAL, r"\\\1", s)  
     return s
 
 retriever = HybridCypherRetriever(
@@ -96,7 +104,27 @@ retriever = HybridCypherRetriever(
     retrieval_query=retrieval_query,
 )
 
-rag = GraphRAG(retriever=retriever, llm=llm)
+prompt_template = RagTemplate(
+    template=(
+        "You are a technical support assistant.\n"
+        "Answer the question using ONLY the provided context.\n"
+        "Write a detailed, structured answer.\n"
+        "- If the question asks for variants, list all variants.\n"
+        "- Include key specs, ranges, and differences.\n"
+        "- Use bullet points and short headings.\n"
+        "If context is insufficient, say what is missing.\n\n"
+        "Examples:\n"
+        "{examples}\n\n"
+        "Context:\n"
+        "{context}\n\n"
+        "Question:\n"
+        "{query_text}\n\n"
+        "Answer:\n"
+    )
+)
+
+
+rag = GraphRAG(retriever=retriever, llm=llm,prompt_template=prompt_template)
 
 # ---------------------------------------------------------------------------
 # 3) Logging helper (context_items wird übergeben)
@@ -111,26 +139,16 @@ def safe_log(
     gold_answer: str,
     context_items: Optional[List[Dict[str, Any]]] = None,
 ):
-    try:
-        log_antwort(
-            script,
-            question_id,
-            query_type,
-            question,
-            answer,
-            gold_answer,
-            context_items=context_items,
-        )
-    except TypeError:
-        # logger supports old signature
-        log_antwort(script, question_id, query_type, question, answer, gold_answer)
-    except Exception as e:
-        print("[WARN] logging failed:", e)
-        try:
-            log_antwort(script, question_id, query_type, question, answer, "")
-        except Exception:
-            log_antwort(script, "", "", question, answer, "")
 
+    log_antwort(
+        script,
+        question_id,
+        query_type,
+        question,
+        answer,
+        gold_answer or "",
+        context_items=context_items,
+    )
 # ---------------------------------------------------------------------------
 # 4) Context retrieval (LlamaIndex-style): call retriever directly
 # ---------------------------------------------------------------------------
@@ -158,7 +176,7 @@ def retrieve_context_items(question: str, top_k: int = 20) -> List[Dict[str, Any
 
     context_items: List[Dict[str, Any]] = []
 
-    # Expected: list[dict] from retrieval_query RETURN
+
     if isinstance(results, list):
         for r in results:
             if isinstance(r, dict):
@@ -172,7 +190,7 @@ def retrieve_context_items(question: str, top_k: int = 20) -> List[Dict[str, Any
                 entities = r.get("entities", [])
                 score = r.get("score", "")
 
-                # Build a richer "content" string that your judge can use
+    
                 meta_lines = []
                 if categories:
                     meta_lines.append(f"Categories: {categories}")
@@ -203,7 +221,7 @@ def retrieve_context_items(question: str, top_k: int = 20) -> List[Dict[str, Any
                     context_items.append({"content": s, "source": "simplekg_vector_index", "id": "", "score": ""})
 
     else:
-        # Unexpected shape -> best-effort
+
         s = str(results).strip()
         if s:
             context_items.append({"content": s, "source": "simplekg_retriever_raw", "id": "", "score": ""})
@@ -227,10 +245,10 @@ def answer_with_graphrag(question: str, top_k: int = 20) -> Tuple[str, List[Dict
     )
     answer = (getattr(response, "answer", None) or "").strip()
 
-    # 🔥 reliable context
+
     context_items = retrieve_context_items(safe_q, top_k=top_k)
 
-    # If still empty, keep explicit marker (for debugging + judge transparency)
+
     if not context_items:
         context_items = [{
             "content": "[NO CONTEXT RETURNED BY RETRIEVER]",
@@ -249,7 +267,7 @@ def run_batch_from_file(top_k: int = 20):
     print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
 
     if not QUESTIONS_PATH.exists():
-        print("[ERROR] golden_answers_dataset_new.jsonl not found.")
+        print("[ERROR] golden_answers_dataset.jsonl not found.")
         return
 
     with QUESTIONS_PATH.open("r", encoding="utf-8") as f:

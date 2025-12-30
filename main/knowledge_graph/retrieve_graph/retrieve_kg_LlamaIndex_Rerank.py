@@ -3,11 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
+from llama_index.core.prompts import PromptTemplate
 from dotenv import load_dotenv, find_dotenv
 from neo4j import GraphDatabase
 
-# LlamaIndex
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
 from llama_index.core import VectorStoreIndex
@@ -35,7 +34,11 @@ except Exception:
 # KG / Property Graph
 from llama_index.graph_stores.neo4j import Neo4jPGStore
 from llama_index.core import PropertyGraphIndex
-from llama_index.core.indices.property_graph import VectorContextRetriever, LLMSynonymRetriever, PGRetriever
+from llama_index.core.indices.property_graph import (
+    VectorContextRetriever,
+    LLMSynonymRetriever,
+    PGRetriever,
+)
 
 from main.evaluation.logger import log_antwort
 
@@ -53,9 +56,19 @@ AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "llmakg"
 
 SCRIPT_NAME = "LLmaIndex_Ensembe_Hybrid_KG_Retriever"
-QUESTIONS_PATH = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\golden_answers_dataset_new.jsonl"
+from pathlib import Path
+import os
+
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+
+QUESTIONS_PATH = (
+    PROJECT_ROOT
+    / "main"
+    / "evaluation"
+    / "graphrag"
+    / "golden_answers_dataset.jsonl"
 )
+
 
 # Chunk schema
 CHUNK_LABEL = "Chunk"
@@ -75,7 +88,7 @@ PG_TOP_K = 15
 
 # After merge
 ENSEMBLE_TOP_K = 60         # candidates before rerank
-FINAL_CONTEXT_K = 10        # what you pass to prompt & log
+FINAL_CONTEXT_K = 12        # what to pass to prompt & log
 
 # Weights (optional)
 W_BM25 = 1.0
@@ -89,49 +102,46 @@ RERANK_MODEL = "BAAI/bge-reranker-base"  # pip install sentence-transformers
 
 # LLM + Embeddings
 embed_model = OpenAIEmbedding(model="text-embedding-3-small")
-llm = OpenAI(model="gpt-4o-mini", temperature=0)
+llm = OpenAI(model=os.getenv("OPENAI_MODEL"), temperature=0, max_tokens=1200)
 
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
 driver.verify_connectivity()
 
+QA_PROMPT = PromptTemplate(
+    "You are a technical support assistant.\n"
+    "Answer the question using ONLY the provided context.\n"
+    "Write a detailed, structured answer.\n"
+    "- If the question asks for variants, list all variants.\n"
+    "- Include key specs, ranges, and differences.\n"
+    "- Use bullet points and short headings.\n"
+    "If context is insufficient, say what is missing.\n\n"
+    "Context:\n{context_str}\n\n"
+    "Question: {query_str}\n\n"
+    "Answer:"
+)
 
 # ---------------------------------------------------------------------------
 # 2) Logging helper (context-aware)
 # ---------------------------------------------------------------------------
 def safe_log(
     script: str,
-    question_id: Any,
-    query_type: Any,
+    question_id: str,
+    query_type: str,
     question: str,
     answer: str,
-    gold_answer: Any,
+    gold_answer: str,
     context_items: Optional[List[Dict[str, Any]]] = None,
-) -> None:
-    try:
-        log_antwort(
-            script,
-            question_id,
-            query_type,
-            question,
-            answer,
-            gold_answer,
-            context_items=context_items,
-        )
-    except Exception as e:
-        print("[WARN] logging failed:", e)
-        try:
-            log_antwort(
-                script,
-                question_id,
-                query_type,
-                question,
-                answer,
-                "",
-                context_items=context_items,
-            )
-        except Exception as e2:
-            print("[ERROR] logging failed again:", e2)
-            log_antwort(script, "", "", question, answer, "")
+):
+    # Einmal versuchen – und wenn es knallt, soll es sichtbar sein.
+    log_antwort(
+        script,
+        question_id,
+        query_type,
+        question,
+        answer,
+        gold_answer or "",
+        context_items=context_items,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +175,8 @@ def load_chunk_nodes(limit: int) -> List[TextNode]:
             "product": r.get("product", ""),
             "product_category": r.get("product_category", ""),
             "retriever": "chunk_store",
+            "node_type": "Chunk",  # <--- hilfreich fürs Logging
+            "label": CHUNK_LABEL,  # <--- optional
         }
 
         n = TextNode(text=text, metadata=meta)
@@ -322,14 +334,58 @@ def ensure_query_engine() -> RetrieverQueryEngine:
         retriever=ensemble,
         node_postprocessors=node_postprocessors,
         llm=llm,
+        prompt_template=QA_PROMPT,
     )
     print("[INFO] QueryEngine ready.")
     return QUERY_ENGINE
 
 
 # ---------------------------------------------------------------------------
-# 6) Ask + extract context_items for logging
+# 6) Ask + extract ONLY Chunk-text context_items for logging
 # ---------------------------------------------------------------------------
+def _is_chunk_node(meta: Dict[str, Any]) -> bool:
+    """
+    Decide whether this source node represents a Chunk.
+    We keep this permissive enough to catch different LlamaIndex/Neo4j metadata shapes,
+    but strict enough to exclude pure Entity/Relation nodes.
+    """
+    # strongest signal: chunk_id present
+    if meta.get("chunk_id"):
+        return True
+
+    # common metadata keys across versions
+    nt = str(meta.get("node_type", "") or "").strip().lower()
+    if nt == "chunk":
+        return True
+
+    label = str(meta.get("label", "") or "").strip().lower()
+    if label == "chunk":
+        return True
+
+    labels = meta.get("labels")
+    if isinstance(labels, (list, tuple, set)):
+        if any(str(x).strip().lower() == "chunk" for x in labels):
+            return True
+
+    return False
+
+
+def _extract_chunk_text(node: Any, meta: Dict[str, Any]) -> str:
+    """
+    Prefer node.get_content(), fallback to meta['text'] if needed.
+    """
+    txt = ""
+    try:
+        txt = (node.get_content() or "").strip()
+    except Exception:
+        txt = ""
+
+    if not txt:
+        txt = str(meta.get("text", "") or "").strip()
+
+    return txt
+
+
 def ask(question: str) -> Tuple[str, List[Dict[str, Any]]]:
     qe = ensure_query_engine()
     resp = qe.query(question)
@@ -338,19 +394,25 @@ def ask(question: str) -> Tuple[str, List[Dict[str, Any]]]:
     context_items: List[Dict[str, Any]] = []
     src_nodes = getattr(resp, "source_nodes", None) or []
 
-    for nws in src_nodes[:FINAL_CONTEXT_K]:
+    # IMPORTANT: log ONLY Chunk node texts
+    for nws in src_nodes:
         node = nws.node
         meta = getattr(node, "metadata", None) or {}
         if not isinstance(meta, dict):
             meta = {}
 
-        content = (node.get_content() or "").strip()
+        if not _is_chunk_node(meta):
+            # skip KG-only nodes (Entity/Relation/Community etc.)
+            continue
+
+        content = _extract_chunk_text(node, meta)
         if not content:
             continue
 
         context_items.append(
             {
-                "content": content,
+                "content": content,  # <- Chunk.text
+                "node_type": "Chunk",  # <- so your logger counts it properly
                 "source": meta.get("file", meta.get("source", "")),
                 "id": meta.get("chunk_id") or getattr(node, "id_", "") or "",
                 "score": float(getattr(nws, "score", 0.0) or 0.0),
@@ -359,6 +421,9 @@ def ask(question: str) -> Tuple[str, List[Dict[str, Any]]]:
                 "retriever": meta.get("retriever", "ensemble"),
             }
         )
+
+        if len(context_items) >= FINAL_CONTEXT_K:
+            break
 
     return answer_text, context_items
 
@@ -369,7 +434,7 @@ def ask(question: str) -> Tuple[str, List[Dict[str, Any]]]:
 def run_batch_from_file() -> None:
     print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
     if not QUESTIONS_PATH.exists():
-        print("[ERROR] golden_answers_dataset_new.jsonl not found.")
+        print("[ERROR] golden_answers_dataset.jsonl not found.")
         return
 
     with QUESTIONS_PATH.open("r", encoding="utf-8") as f:

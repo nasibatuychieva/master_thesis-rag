@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
-
+from neo4j_graphrag.generation import RagTemplate
 from dotenv import load_dotenv, find_dotenv
 from neo4j import GraphDatabase
 
@@ -27,9 +27,19 @@ DATABASE = "llmagraphtrkg"
 
 SCRIPT_NAME = "LLMGraph_Hybrid_KG_Retriever"
 
-QUESTIONS_PATH = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\golden_answers_dataset_new.jsonl"
+from pathlib import Path
+import os
+
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+
+QUESTIONS_PATH = (
+    PROJECT_ROOT
+    / "main"
+    / "evaluation"
+    / "graphrag"
+    / "golden_answers_dataset.jsonl"
 )
+
 
 # Neo4j driver
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
@@ -37,7 +47,7 @@ driver.verify_connectivity()
 
 # LLM for GraphRAG answer generation
 llm = OpenAILLM(
-    model_name="gpt-4o-mini",
+    model_name=os.getenv("OPENAI_MODEL"),
     model_params={"temperature": 0},
 )
 
@@ -71,6 +81,7 @@ RETURN DISTINCT
     ELSE [node.file_name]
   END AS documents
 """
+
 import re
 
 LUCENE_SPECIAL = r'(\+|\-|\&\&|\|\||\!|\(|\)|\{|\}|\[|\]|\^|"|~|\*|\?|\:|\\|\/)'
@@ -90,7 +101,28 @@ retriever = HybridCypherRetriever(
     retrieval_query=retrieval_query,
 )
 
-rag = GraphRAG(retriever=retriever, llm=llm)
+
+prompt_template = RagTemplate(
+    template=(
+        "You are a technical support assistant.\n"
+        "Answer the question using ONLY the provided context.\n"
+        "Write a detailed, structured answer.\n"
+        "- If the question asks for variants, list all variants.\n"
+        "- Include key specs, ranges, and differences.\n"
+        "- Use bullet points and short headings.\n"
+        "If context is insufficient, say what is missing.\n\n"
+        "Examples:\n"
+        "{examples}\n\n"
+        "Context:\n"
+        "{context}\n\n"
+        "Question:\n"
+        "{query_text}\n\n"
+        "Answer:\n"
+    )
+)
+
+
+rag = GraphRAG(retriever=retriever, llm=llm,prompt_template=prompt_template)
 
 # ---------------------------------------------------------------------------
 # 3) Logging
@@ -105,25 +137,16 @@ def safe_log(
     gold_answer: str,
     context_items: Optional[List[Dict[str, Any]]] = None,
 ):
-    try:
-        log_antwort(
-            script,
-            question_id,
-            query_type,
-            question,
-            answer,
-            gold_answer or "",
-            context_items=context_items,
-        )
-    except TypeError:
-        # older signature
-        log_antwort(script, question_id, query_type, question, answer, gold_answer or "")
-    except Exception as e:
-        print("[WARN] logging failed:", e)
-        try:
-            log_antwort(script, question_id, query_type, question, answer, "")
-        except Exception:
-            log_antwort(script, "", "", question, answer, "")
+
+    log_antwort(
+        script,
+        question_id,
+        query_type,
+        question,
+        answer,
+        gold_answer or "",
+        context_items=context_items,
+    )
 
 # ---------------------------------------------------------------------------
 # 4) Retrieve context directly from retriever (robust across versions)
@@ -134,7 +157,7 @@ def _call_retriever(question: str, top_k: int):
     HybridCypherRetriever API differs between versions.
     Try common method names/signatures.
     """
-    # Most common:
+
     if hasattr(retriever, "search"):
         try:
             return retriever.search(query_text=question, top_k=top_k)
@@ -150,6 +173,10 @@ def _call_retriever(question: str, top_k: int):
     raise RuntimeError("HybridCypherRetriever has no search/retrieve method in this version.")
 
 def retrieve_context_items(question: str, top_k: int) -> List[Dict[str, Any]]:
+    """
+    Ensures the logged context is the CHUNK TEXT (node.text) and sets node_type='Chunk'
+    so your logger's context_types_json is meaningful.
+    """
     results = _call_retriever(question, top_k=top_k)
 
     context_items: List[Dict[str, Any]] = []
@@ -160,33 +187,60 @@ def retrieve_context_items(question: str, top_k: int) -> List[Dict[str, Any]]:
             if not isinstance(r, dict):
                 s = str(r).strip()
                 if s:
-                    context_items.append({"content": s, "source": "", "id": "", "score": ""})
+                    context_items.append(
+                        {
+                            "content": s,
+                            "source": "",
+                            "id": "",
+                            "score": "",
+                            "node_type": "Chunk",
+                        }
+                    )
                 continue
 
-            text = str(r.get("text") or "").strip()
-            if not text:
+            # --- THIS is the chunk text to log ---
+            chunk_text = str(r.get("text") or "").strip()
+            if not chunk_text:
                 continue
 
             docs = r.get("documents", [])
             if not isinstance(docs, list):
                 docs = [str(docs)]
 
-            context_items.append({
-                "content": text,
-                "source": ", ".join([str(x) for x in docs if x]),
-                "id": str(r.get("chunk_id") or ""),
-                "score": r.get("score", ""),
-                "entities": r.get("entities", []),
-                "documents": docs,
-                "file_name": r.get("file_name", ""),
-            })
+            file_name = str(r.get("file_name") or "").strip()
+
+            context_items.append(
+                {
+                    # Logger reads THIS field as prompt_context_text etc.
+                    "content": chunk_text,
+
+                  
+                    "node_type": "Chunk",
+                    "id": str(r.get("chunk_id") or ""),
+                    "score": r.get("score", ""),
+                    "entities": r.get("entities", []),
+                    "documents": docs,
+                    "file_name": file_name,
+
+                
+                    "source": ", ".join([str(x) for x in docs if x]),
+                }
+            )
 
         return context_items
 
     # Fallback: object/string
     s = str(results).strip()
     if s:
-        context_items.append({"content": s, "source": "retriever_raw", "id": "", "score": ""})
+        context_items.append(
+            {
+                "content": s,
+                "source": "retriever_raw",
+                "id": "",
+                "score": "",
+                "node_type": "Chunk",
+            }
+        )
     return context_items
 
 # ---------------------------------------------------------------------------
@@ -195,14 +249,16 @@ def retrieve_context_items(question: str, top_k: int) -> List[Dict[str, Any]]:
 
 def answer_with_rag(question: str, top_k: int = 20) -> Tuple[str, List[Dict[str, Any]]]:
     safe_q = lucene_escape(question)
+
     # GraphRAG generation
     response = rag.search(
         query_text=safe_q,
         retriever_config={"top_k": top_k},
     )
+
     answer = (getattr(response, "answer", None) or "").strip()
 
-    # Context from retriever directly (your reliable path)
+    # Context from retriever directly 
     context_items = retrieve_context_items(safe_q, top_k=top_k)
     return answer, context_items
 
@@ -214,7 +270,7 @@ def run_batch_from_file(top_k: int = 20):
     print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
 
     if not QUESTIONS_PATH.exists():
-        print("[ERROR] golden_answers_dataset_new.jsonl not found.")
+        print("[ERROR] golden_answers_dataset.jsonl not found.")
         return
 
     with QUESTIONS_PATH.open("r", encoding="utf-8") as f:

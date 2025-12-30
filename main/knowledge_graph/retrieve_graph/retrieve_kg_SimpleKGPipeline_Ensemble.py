@@ -15,7 +15,7 @@ from main.evaluation.logger import log_antwort
 # ----------------------------------------------------------------------------
 load_dotenv(find_dotenv())
 
-import os  
+import os
 
 URI = os.getenv("NEO4J_URI")
 AUTH_USER = os.getenv("NEO4J_USER")
@@ -25,11 +25,12 @@ DATABASE = "simplekg"
 FULLTEXT_INDEX_NAME = "chunkFulltext_simplekg"
 VECTOR_INDEX_NAME = "chunkEmbedding_simplekg"
 
-TEXT_PROPERTY = "text"
-FILE_PROPERTY_CANDIDATES = ["file_name", "file"]  
+# Community: Vector Index 
+COMMUNITY_VECTOR_INDEX_NAME = "communityEmbedding_simplekg"
+COMMUNITY_LABEL = "__Community__"
 
-from pathlib import Path
-import os
+TEXT_PROPERTY = "text"
+FILE_PROPERTY_CANDIDATES = ["file_name", "file"]
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
 
@@ -44,13 +45,18 @@ QUESTIONS_PATH = (
 SCRIPT_NAME = "SimpleKG_Hybrid_KG_Retriever_Rerank"
 
 # Hybrid parameters
-ALPHA = 0.6
+ALPHA = 0.6                  # dense vs sparse weight
 K_SPARSE = 30
 K_DENSE = 30
+
+# Community retrieval
+K_COMMUNITY = 15             # how many communities to retrieve
+GAMMA = 0.25                 # how much community signal contributes to hybrid_score 
+
 CANDIDATE_CAP_FOR_RERANK = 25
 RERANK_TOP_K = 6
 
-DEBUG = True  
+DEBUG = True
 
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
 driver.verify_connectivity()
@@ -67,12 +73,10 @@ embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 # ----------------------------------------------------------------------------
 LUCENE_SPECIAL = r'(\+|\-|\&\&|\|\||\!|\(|\)|\{|\}|\[|\]|\^|"|~|\*|\?|\:|\\|\/)'
 
-
 def lucene_escape_term(s: str) -> str:
     s = re.sub(r"\s+", " ", (s or "").strip())
     s = re.sub(LUCENE_SPECIAL, r"\\\1", s)
     return s
-
 
 def safe_log(
     script: str,
@@ -92,7 +96,6 @@ def safe_log(
         gold_answer or "",
         context_items=context_items,
     )
-
 
 # ----------------------------------------------------------------------------
 # 2) Pre-retrieval: rewrite + keywords (Lucene-safe)
@@ -121,21 +124,13 @@ Rules:
     kw_out = llm_router.invoke(kw_prompt).content
     keywords = [k.strip() for k in kw_out.split(",") if k.strip()]
 
-
     keywords_esc = [lucene_escape_term(k) for k in keywords]
-
     return {"original": question, "rewritten": rewritten, "keywords": keywords_esc}
 
-
 def build_fulltext_query(pre: Dict[str, Any]) -> str:
-    """
-    Build a Lucene query that is safe and effective.
-    We DO NOT pass the raw question into Lucene.
-    """
     kws = pre["keywords"][:10]
     if not kws:
         return "arduino"
-
 
     parts = []
     for k in kws:
@@ -144,12 +139,10 @@ def build_fulltext_query(pre: Dict[str, Any]) -> str:
         else:
             parts.append(k)
 
-
     return " OR ".join(parts)
 
-
 # ----------------------------------------------------------------------------
-# 3) Sparse retrieval (Fulltext)
+# 3) Sparse retrieval (Fulltext on Chunks)
 # ----------------------------------------------------------------------------
 def retrieve_sparse(pre: Dict[str, Any], k: int) -> List[Dict[str, Any]]:
     q = build_fulltext_query(pre)
@@ -170,10 +163,8 @@ def retrieve_sparse(pre: Dict[str, Any], k: int) -> List[Dict[str, Any]]:
             if not text:
                 continue
 
-           
             chunk_id = node.get("chunk_id") or node.get("id") or node.element_id
 
-           
             file_name = ""
             for fp in FILE_PROPERTY_CANDIDATES:
                 if fp in node and node.get(fp):
@@ -186,7 +177,6 @@ def retrieve_sparse(pre: Dict[str, Any], k: int) -> List[Dict[str, Any]]:
                     "text": text,
                     "file_name": file_name,
                     "sparse_score": score,
-                   
                     "node_type": "Chunk",
                     "text_property": TEXT_PROPERTY,
                 }
@@ -197,9 +187,8 @@ def retrieve_sparse(pre: Dict[str, Any], k: int) -> List[Dict[str, Any]]:
 
     return rows
 
-
 # ----------------------------------------------------------------------------
-# 4) Dense retrieval (Vector)
+# 4) Dense retrieval (Vector on Chunks)
 # ----------------------------------------------------------------------------
 def retrieve_dense(query: str, k: int) -> List[Dict[str, Any]]:
     qvec = embeddings.embed_query(query)
@@ -234,7 +223,6 @@ def retrieve_dense(query: str, k: int) -> List[Dict[str, Any]]:
                     "text": text,
                     "file_name": file_name,
                     "dense_score": score,
-                   
                     "node_type": "Chunk",
                     "text_property": TEXT_PROPERTY,
                 }
@@ -245,6 +233,67 @@ def retrieve_dense(query: str, k: int) -> List[Dict[str, Any]]:
 
     return rows
 
+# ----------------------------------------------------------------------------
+# 4b) Community retrieval (Vector on Communities -> expand to Chunks via Entity)
+# Path: (c:__Community__)-[:IN_COMMUNITY]-(e:__Entity__)-[:FROM_CHUNK]-(ch:Chunk)
+# ----------------------------------------------------------------------------
+def retrieve_community_dense(query: str, k_comm: int) -> List[Dict[str, Any]]:
+    qvec = embeddings.embed_query(query)
+
+    cypher = f"""
+    CALL db.index.vector.queryNodes($comm_index, $k, $qvec)
+    YIELD node AS c, score AS c_score
+    WHERE $community_label IN labels(c)
+
+    // expand community -> entity -> chunk
+    MATCH (c)-[:IN_COMMUNITY]-(e:`__Entity__`)-[:FROM_CHUNK]-(ch:Chunk)
+
+    WITH ch, max(c_score) AS community_score
+    RETURN ch AS node, community_score
+    ORDER BY community_score DESC
+    """
+
+    rows: List[Dict[str, Any]] = []
+    with driver.session(database=DATABASE) as session:
+        res = session.run(
+            cypher,
+            comm_index=COMMUNITY_VECTOR_INDEX_NAME,
+            k=k_comm,
+            qvec=qvec,
+            community_label=COMMUNITY_LABEL,
+        )
+
+        for r in res:
+            node = r["node"]
+            score = float(r["community_score"] or 0.0)
+            text = (node.get(TEXT_PROPERTY) or "").strip()
+            if not text:
+                continue
+
+            chunk_id = node.get("chunk_id") or node.get("id") or node.element_id
+
+            file_name = ""
+            for fp in FILE_PROPERTY_CANDIDATES:
+                if fp in node and node.get(fp):
+                    file_name = str(node.get(fp))
+                    break
+
+            rows.append(
+                {
+                    "chunk_id": str(chunk_id),
+                    "text": text,
+                    "file_name": file_name,
+                    "community_score": score,
+                    "node_type": "Chunk",
+                    "text_property": TEXT_PROPERTY,
+                    "from_community": True,
+                }
+            )
+
+    if DEBUG:
+        print(f"[DEBUG] community_vec_hits={len(rows)} (expanded to chunks)")
+
+    return rows
 
 # ----------------------------------------------------------------------------
 # 5) Fuse sparse+dense (minmax) + dedupe by chunk_id
@@ -256,7 +305,6 @@ def minmax(scores: List[float]) -> Dict[float, float]:
     if mx == mn:
         return {s: 1.0 for s in scores}
     return {s: (s - mn) / (mx - mn) for s in scores}
-
 
 def fuse_hybrid(
     sparse_rows: List[Dict[str, Any]],
@@ -283,7 +331,8 @@ def fuse_hybrid(
                 "dense_score": None,
                 "sparse_norm": 0.0,
                 "dense_norm": 0.0,
-                # --- NEW: keep node_type through fusion
+                "community_score": None,
+                "community_norm": 0.0,
                 "node_type": row.get("node_type", "Chunk"),
                 "text_property": row.get("text_property", ""),
             }
@@ -292,22 +341,13 @@ def fuse_hybrid(
             s = float(row.get("sparse_score", 0.0) or 0.0)
             merged[cid]["sparse_score"] = s
             merged[cid]["sparse_norm"] = s_norm.get(s, 0.0)
-        else:
+        elif kind == "dense":
             d = float(row.get("dense_score", 0.0) or 0.0)
             merged[cid]["dense_score"] = d
             merged[cid]["dense_norm"] = d_norm.get(d, 0.0)
 
-    
         if not merged[cid].get("file_name") and row.get("file_name"):
             merged[cid]["file_name"] = row["file_name"]
-
-    
-        if not merged[cid].get("node_type") and row.get("node_type"):
-            merged[cid]["node_type"] = row["node_type"]
-
-       
-        if not merged[cid].get("text_property") and row.get("text_property"):
-            merged[cid]["text_property"] = row["text_property"]
 
     for r in sparse_rows:
         upsert(r, "sparse")
@@ -322,15 +362,67 @@ def fuse_hybrid(
     out.sort(key=lambda x: float(x.get("hybrid_score", 0.0) or 0.0), reverse=True)
     return out
 
+# ----------------------------------------------------------------------------
+# 5b) Add community signal into fused list 
+# ----------------------------------------------------------------------------
+def fuse_add_community(
+    fused: List[Dict[str, Any]],
+    community_rows: List[Dict[str, Any]],
+    gamma: float,
+) -> List[Dict[str, Any]]:
+    if not community_rows:
+        return fused
+
+    comm_scores = [float(r.get("community_score", 0.0) or 0.0) for r in community_rows]
+    comm_norm_map = minmax(comm_scores)
+
+
+    by_id: Dict[str, Dict[str, Any]] = {it["chunk_id"]: it for it in fused if it.get("chunk_id")}
+
+    for r in community_rows:
+        cid = (r.get("chunk_id") or "").strip()
+        if not cid:
+            continue
+        cs = float(r.get("community_score", 0.0) or 0.0)
+        cn = comm_norm_map.get(cs, 0.0)
+
+        if cid not in by_id:
+    
+            by_id[cid] = {
+                "chunk_id": cid,
+                "text": r.get("text", ""),
+                "file_name": r.get("file_name", ""),
+                "sparse_score": None,
+                "dense_score": None,
+                "sparse_norm": 0.0,
+                "dense_norm": 0.0,
+                "community_score": cs,
+                "community_norm": cn,
+                "node_type": "Chunk",
+                "text_property": r.get("text_property", TEXT_PROPERTY),
+                "hybrid_score": gamma * cn,
+            }
+        else:
+
+            it = by_id[cid]
+            it["community_score"] = cs
+            it["community_norm"] = cn
+            it["hybrid_score"] = float(it.get("hybrid_score", 0.0) or 0.0) + gamma * cn
+
+    out = list(by_id.values())
+    out.sort(key=lambda x: float(x.get("hybrid_score", 0.0) or 0.0), reverse=True)
+
+    if DEBUG:
+        print(f"[DEBUG] fused_with_community total={len(out)} gamma={gamma}")
+
+    return out
 
 # ----------------------------------------------------------------------------
 # 6) Schema-aware enrichment
-
 # ----------------------------------------------------------------------------
 def enrich_with_schema(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not items:
         return []
-
 
     chunk_ids = [it["chunk_id"] for it in items if it.get("chunk_id")]
     if not chunk_ids:
@@ -371,7 +463,6 @@ def enrich_with_schema(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     return items
 
-
 # ----------------------------------------------------------------------------
 # 7) LLM Rerank
 # ----------------------------------------------------------------------------
@@ -390,6 +481,10 @@ def rerank(question: str, items: List[Dict[str, Any]], top_k: int) -> List[Dict[
             meta.append(f"categories={it['categories']}")
         if it.get("entities"):
             meta.append(f"entities={it['entities'][:10]}")
+        # include community info (optional)
+        if it.get("community_norm", 0) > 0:
+            meta.append(f"comm_norm={it.get('community_norm',0):.2f}")
+
         meta_str = " | ".join(meta) if meta else "no_meta"
 
         blocks.append(
@@ -424,7 +519,6 @@ No explanations.
 
     return [candidates[i] for i in idxs[:top_k]]
 
-
 # ----------------------------------------------------------------------------
 # 8) Final answer generation
 # ----------------------------------------------------------------------------
@@ -434,14 +528,17 @@ def answer_question(question: str) -> Tuple[str, List[Dict[str, Any]]]:
     sparse = retrieve_sparse(pre, k=K_SPARSE)
     dense = retrieve_dense(pre["rewritten"], k=K_DENSE)
 
+
+    community_chunks = retrieve_community_dense(pre["rewritten"], k_comm=K_COMMUNITY)
+
     fused = fuse_hybrid(sparse, dense, alpha=ALPHA)
+    fused = fuse_add_community(fused, community_chunks, gamma=GAMMA)
     fused = enrich_with_schema(fused)
 
     if DEBUG:
         print(f"[DEBUG] fused_total={len(fused)} top5_hybrid={[round(x.get('hybrid_score',0),3) for x in fused[:5]]}")
 
     if not fused:
-        # logging-friendly
         ctx = [{"content": "[NO CANDIDATES FROM RETRIEVAL]", "source": "system", "id": "", "score": "", "node_type": "system"}]
         return "I don't know.", ctx
 
@@ -456,36 +553,36 @@ def answer_question(question: str) -> Tuple[str, List[Dict[str, Any]]]:
     )
 
     answer_prompt = f"""
-        "You are a technical support assistant.\n"
-        "Answer the question using ONLY the provided context.\n"
-        "Write a detailed, structured answer.\n"
-        "- If the question asks for variants, list all variants.\n"
-        "- Include key specs, ranges, and differences.\n"
-        "- Use bullet points and short headings.\n"
-        "If context is insufficient, say what is missing.\n\n"
+You are a technical support assistant.
+Answer the question using ONLY the provided context.
+Write a detailed, structured answer.
+- If the question asks for variants, list all variants.
+- Include key specs, ranges, and differences.
+- Use bullet points and short headings.
+If context is insufficient, say what is missing.
 
 Question:
 {question}
 
 Context:
 {context}
-
 """.strip()
 
     answer = llm_answer.invoke(answer_prompt).content.strip()
-
 
     context_items: List[Dict[str, Any]] = []
     for it in selected:
         context_items.append(
             {
-                "content": it["text"], 
+                "content": it["text"],
                 "node_type": it.get("node_type", "Chunk"),
                 "source": it.get("file_name", ""),
                 "id": it.get("chunk_id", ""),
                 "hybrid_score": it.get("hybrid_score", None),
                 "dense_score": it.get("dense_score", None),
                 "sparse_score": it.get("sparse_score", None),
+                "community_score": it.get("community_score", None),
+                "community_norm": it.get("community_norm", None),
                 "products": it.get("products", []),
                 "categories": it.get("categories", []),
                 "entities": it.get("entities", []),
@@ -532,7 +629,6 @@ def run_batch():
 
             safe_log(SCRIPT_NAME, qid, qtype, question, answer, gold, context_items=ctx)
 
-
 def manual():
     qid = input("Question ID (optional): ").strip() or ""
     qtype = input("Query type (optional): ").strip() or "manual"
@@ -546,9 +642,8 @@ def manual():
 
     safe_log(SCRIPT_NAME, qid, qtype, question, answer, gold, context_items=ctx)
 
-
 def main():
-    print("SIMPLEKG_HYBRID_RERANK_FIXED")
+    print("SIMPLEKG_HYBRID_RERANK_WITH_COMMUNITY_VEC")
     print("y = manual | n = batch | exit\n")
     while True:
         cmd = input("> ").strip().lower()
@@ -560,7 +655,6 @@ def main():
             run_batch()
         else:
             print("Please enter y/n/exit\n")
-
 
 if __name__ == "__main__":
     try:

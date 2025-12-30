@@ -21,12 +21,18 @@ load_dotenv(find_dotenv())
 URI = os.getenv("NEO4J_URI")
 AUTH_USER = os.getenv("NEO4J_USER")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
-DATABASE = "simplekg"
-SCRIPT_NAME = "SimpleKG_Community_KG_Retriever_Batched"
 
-PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", str(Path(__file__).resolve().parents[3]))).expanduser().resolve()
-QUESTIONS_PATH = (
-    PROJECT_ROOT / "main" / "evaluation" / "graphrag" / "golden_answers_dataset_new.jsonl"
+
+DATABASE = os.getenv("NEO4J_DATABASE", "llmagraphtrkg")
+
+SCRIPT_NAME = "LLMGraph_Community_KG_Retriever"
+
+# Dataset path (keep your explicit path if you want)
+QUESTIONS_PATH = Path(
+    os.getenv(
+        "QUESTIONS_PATH",
+        r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\golden_answers_dataset_new.jsonl",
+    )
 )
 
 MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
@@ -35,12 +41,16 @@ LEVEL = int(os.getenv("COMMUNITY_LEVEL", "1"))
 # IMPORTANT: batch = nur Portionierung, NICHT droppen
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "8"))
 
-# Hard limits, um Token-Explosion zu verhindern, ohne Communities wegzulassen
+# Hard limits (Token-Schutz), ohne Communities wegzulassen
 MAX_CHARS_PER_COMMUNITY = int(os.getenv("MAX_CHARS_PER_COMMUNITY", "6000"))
 MAX_CHARS_PER_BATCH = int(os.getenv("MAX_CHARS_PER_BATCH", "60000"))
 
 # optional resume (falls es mitten drin crasht)
 START_BATCH = int(os.getenv("START_BATCH", "0"))
+
+# logging: avoid gigantic CSV rows
+MAX_CHUNKS_PER_COMMUNITY = int(os.getenv("MAX_CHUNKS_PER_COMMUNITY", "10"))
+MAX_CHUNK_CHARS = int(os.getenv("MAX_CHUNK_CHARS", "2500"))
 
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
 driver.verify_connectivity()
@@ -49,7 +59,7 @@ llm = ChatOpenAI(model=MODEL, temperature=0)
 
 
 # ---------------------------------------------------------------------------
-# 1) Cypher: fetch community summaries for a given level
+# 1) Cypher: fetch community summaries for a given level (USED FOR ANSWERING)
 # ---------------------------------------------------------------------------
 QUERY_COMMUNITIES = """
 MATCH (c:__Community__)
@@ -58,6 +68,48 @@ WHERE c.level = $level
   AND c.full_content <> ""
 RETURN c.communityId AS cid, c.full_content AS txt
 ORDER BY cid
+"""
+
+
+# ---------------------------------------------------------------------------
+# 1b) Cypher: fetch Chunk texts for a set of communities (USED FOR LOGGING)
+#    Keep your robust "try relations" logic for llmagraphtrkg
+# ---------------------------------------------------------------------------
+QUERY_CHUNKS_FOR_COMMUNITIES = """
+UNWIND $cids AS cid
+MATCH (c:__Community__ {communityId: cid})
+WHERE c.level = $level
+
+CALL {
+  WITH c
+  // --- direct community -> chunk ---
+  OPTIONAL MATCH (c)-[
+    :HAS_CHUNK|:CONTAINS_CHUNK|:CONTAINS|:HAS_MEMBER|:MEMBER_OF|:IN_COMMUNITY|:PART_OF
+  ]-(ch:Chunk)
+  RETURN ch
+
+  UNION
+
+  WITH c
+  // --- indirect via entities (community -> entity -> chunk) ---
+  OPTIONAL MATCH (c)-[
+    :HAS_ENTITY|:CONTAINS_ENTITY|:MENTIONS|:HAS_TERM|:HAS_CONCEPT
+  ]-(e)
+  OPTIONAL MATCH (e)-[
+    :MENTIONED_IN|:IN_CHUNK|:APPEARS_IN|:HAS_EVIDENCE|:EVIDENCE_IN
+  ]-(ch:Chunk)
+  RETURN ch
+}
+
+WITH cid, collect(DISTINCT ch) AS chunks
+WITH cid, [x IN chunks WHERE x IS NOT NULL][0..$max_chunks] AS chunks_limited
+UNWIND chunks_limited AS ch
+RETURN
+  cid AS communityId,
+  elementId(ch) AS chunk_eid,
+  coalesce(ch.pk, ch.id, ch.chunk_id, ch.uuid, "") AS chunk_pk,
+  coalesce(ch.text, ch.content, ch.chunk, ch.body, "") AS chunk_text
+ORDER BY communityId
 """
 
 
@@ -109,14 +161,12 @@ def safe_log(
         gold_answer or "",
         context_items=context_items,
     )
-
-# ---------------------------------------------------------------------------
-# 4) Retrieval: load all communities (NO dropping)
+    # ---------------------------------------------------------------------------
+# 4) Retrieval: communities (NO dropping)
 # ---------------------------------------------------------------------------
 def load_community_summaries(level: int) -> List[Dict[str, Any]]:
     with driver.session(database=DATABASE) as session:
-        rows = session.run(QUERY_COMMUNITIES, level=level).data()
-    return rows
+        return session.run(QUERY_COMMUNITIES, level=level).data()
 
 
 def _truncate(s: str, max_chars: int) -> str:
@@ -126,23 +176,69 @@ def _truncate(s: str, max_chars: int) -> str:
     return s[: max_chars - 3] + "..."
 
 
-def build_context_items(batch_rows: List[Dict[str, Any]], level: int) -> List[Dict[str, Any]]:
+# ---------------------------------------------------------------------------
+# 5) Logging context retrieval: chunks for used communities
+# ---------------------------------------------------------------------------
+def load_chunks_for_communities(
+    cids: List[Any],
+    level: int,
+    max_chunks_per_community: int = MAX_CHUNKS_PER_COMMUNITY,
+) -> List[Dict[str, Any]]:
+    if not cids:
+        return []
+    with driver.session(database=DATABASE) as session:
+        rows = session.run(
+            QUERY_CHUNKS_FOR_COMMUNITIES,
+            cids=cids,
+            level=level,
+            max_chunks=max_chunks_per_community,
+        ).data()
+    return rows
+
+
+def build_context_items_from_chunks(
+    batch_rows: List[Dict[str, Any]],
+    level: int,
+) -> List[Dict[str, Any]]:
+    """
+    LOG ONLY chunk text for communities used in this batch.
+    """
+    cids = [br.get("cid") for br in batch_rows if br.get("cid") is not None]
+    chunk_rows = load_chunks_for_communities(
+        cids=cids,
+        level=level,
+        max_chunks_per_community=MAX_CHUNKS_PER_COMMUNITY,
+    )
+
     items: List[Dict[str, Any]] = []
-    for r in batch_rows:
+    for r in chunk_rows:
+        community_id = r.get("communityId")
+        chunk_text = _truncate(str(r.get("chunk_text", "") or "").strip(), MAX_CHUNK_CHARS)
+        if not chunk_text:
+            continue
+
+        chunk_eid = str(r.get("chunk_eid") or "")
+        chunk_pk = str(r.get("chunk_pk") or "")
+
         items.append({
-            "content": str(r.get("txt", "")).strip(),
-            "source": f"__Community__ level={level}",
-            "id": f"{level}-{r.get('cid')}",
+            "content": chunk_text,
+            "node_type": "Chunk",
+            "source": f"Chunk linked to __Community__ level={level} communityId={community_id}",
+            "id": chunk_eid or chunk_pk or f"chunk@community={community_id}",
             "score": "",
-            "communityId": r.get("cid"),
+            "communityId": community_id,
             "level": level,
-            "type": "community_summary",
+            "chunk_eid": chunk_eid,
+            "chunk_pk": chunk_pk,
         })
+
     return items
 
 
 # ---------------------------------------------------------------------------
-# 5) Answer generation: process ALL communities sequentially in batches
+# 6) Answer generation: process ALL communities sequentially in batches
+#    + token-safe truncation
+#    + chunk-only logging (like your Retriever 1)
 # ---------------------------------------------------------------------------
 def answer_global(
     question: str,
@@ -159,17 +255,15 @@ def answer_global(
     total_batches = (len(rows) + batch_size - 1) // batch_size
     print(f"[INFO] Communities loaded: {len(rows)} | batch_size={batch_size} | batches={total_batches}")
 
-    # Process ALL batches (no dropping)
     for b in range(START_BATCH, total_batches):
         i = b * batch_size
         batch_rows = rows[i:i + batch_size]
 
-        # Per-community truncation (prevents single huge community from blowing up tokens)
-        texts = []
+        # Per-community truncation => prevents single huge community from blowing up tokens
+        texts: List[str] = []
         for br in batch_rows:
             txt = br.get("txt", "") or ""
-            txt = _truncate(txt, MAX_CHARS_PER_COMMUNITY)
-            texts.append(txt)
+            texts.append(_truncate(txt, MAX_CHARS_PER_COMMUNITY))
 
         summaries_text = "\n\n---\n\n".join(texts)
         summaries_text = _truncate(summaries_text, MAX_CHARS_PER_BATCH)
@@ -184,11 +278,9 @@ def answer_global(
         if partial:
             partials.append(partial)
 
-        # log contexts used in this batch (full original, NOT truncated, if you want keep as-is)
-        # If your logger grows too much, switch content to the truncated version above.
-        all_context_items.extend(build_context_items(batch_rows, level=level))
+        # ✅ Logging (chunks linked to communities used in THIS batch)
+        all_context_items.extend(build_context_items_from_chunks(batch_rows, level=level))
 
-    # Final synthesis
     if not partials:
         return "No partial answers produced. Possibly empty context.", all_context_items
 
@@ -205,7 +297,7 @@ def answer_global(
 
 
 # ---------------------------------------------------------------------------
-# 6) Batch runner (JSONL)
+# 7) Batch runner (JSONL)
 # ---------------------------------------------------------------------------
 def run_batch_from_file():
     print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
@@ -217,7 +309,6 @@ def run_batch_from_file():
         for line_no, line in enumerate(f, start=1):
             if not line.strip():
                 continue
-
             try:
                 obj = json.loads(line)
             except Exception:
@@ -242,7 +333,7 @@ def run_batch_from_file():
                 context_items = []
 
             print(f"[ANSWER]\n{answer}\n")
-            print(f"[CTX] n_context={len(context_items)} (community summaries)\n")
+            print(f"[CTX] n_context={len(context_items)} (chunks)\n")
 
             safe_log(
                 SCRIPT_NAME,
@@ -258,7 +349,7 @@ def run_batch_from_file():
 
 
 # ---------------------------------------------------------------------------
-# 7) Manual mode
+# 8) Manual mode
 # ---------------------------------------------------------------------------
 def manual_question():
     qid = input("Question ID (optional): ").strip()
@@ -273,7 +364,7 @@ def manual_question():
     answer, context_items = answer_global(question, level=LEVEL, batch_size=BATCH_SIZE)
 
     print("\nAnswer:\n", answer, "\n")
-    print(f"[CTX] n_context={len(context_items)} (community summaries)\n")
+    print(f"[CTX] n_context={len(context_items)} (chunks)\n")
 
     safe_log(
         SCRIPT_NAME,
@@ -288,7 +379,12 @@ def manual_question():
 
 def main_loop():
     print(f"{SCRIPT_NAME} | DB={DATABASE} | Level={LEVEL} | Model={MODEL}")
-    print(f"BATCH_SIZE={BATCH_SIZE} | MAX_CHARS_PER_COMMUNITY={MAX_CHARS_PER_COMMUNITY} | MAX_CHARS_PER_BATCH={MAX_CHARS_PER_BATCH}")
+    print(
+        f"BATCH_SIZE={BATCH_SIZE} | MAX_CHARS_PER_COMMUNITY={MAX_CHARS_PER_COMMUNITY} | MAX_CHARS_PER_BATCH={MAX_CHARS_PER_BATCH}"
+    )
+    print(
+        f"LOGGING: MAX_CHUNKS_PER_COMMUNITY={MAX_CHUNKS_PER_COMMUNITY} | MAX_CHUNK_CHARS={MAX_CHUNK_CHARS} | START_BATCH={START_BATCH}"
+    )
     print("Type 'exit' to quit.\n")
 
     while True:

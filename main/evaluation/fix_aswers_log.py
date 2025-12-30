@@ -182,7 +182,7 @@ import json
 from pathlib import Path
 
 IN_PATH = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\answers_log_new_dataset.csv"
+    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\answers_log_new_dataset.csv"
 )
 OUT_PATH = IN_PATH.with_name("answers_log_new_dataset_fixed.csv")
 

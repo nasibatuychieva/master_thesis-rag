@@ -1,22 +1,5 @@
 # ============================================================================
-# ONLY_RAG_HYBRID_Advanced
-# Hybrid Retrieval-Augmented Generation:
-#   (1) Sparse: Neo4j FULLTEXT (Lucene)
-#   (2) Dense:  Neo4j VECTOR index (db.index.vector.queryNodes)
-# + LLM Rerank
-# + Full logging (faithfulness-ready)
-# ============================================================================
-#
-# Prereqs in Neo4j (examples):
-#   - FULLTEXT index exists:
-#       CREATE FULLTEXT INDEX chunk_text_ft FOR (c:Chunk) ON EACH [c.text];
-#
-#   - VECTOR index exists (Neo4j 5.11+):
-#       CREATE VECTOR INDEX chunkEmbedding
-#       FOR (c:Chunk) ON (c.embedding)
-#       OPTIONS { indexConfig: { `vector.dimensions`: 1536, `vector.similarity_function`: 'cosine' } };
-#
-# Adjust FULLTEXT_INDEX_NAME / VECTOR_INDEX_NAME / EMB_PROPERTY / TEXT_PROPERTY accordingly.
+
 # ============================================================================
 
 import json
@@ -37,9 +20,9 @@ load_dotenv(find_dotenv())
 
 import os
 
-URI = os.getenv("NEO4J_URI")
-AUTH_USER = os.getenv("NEO4J_USER")
-AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
+URI = os.getenv("NEO4J_URI_RAG")
+AUTH_USER = os.getenv("NEO4J_USER_RAG")
+AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD_RAG")
 DATABASE = "rag"
 
 NODE_LABEL = "Chunk"
@@ -60,9 +43,19 @@ RERANK_TOP_K = 6
 
 SCRIPT_NAME = "RAG_Hybrid_Advanced"
 
-QUESTIONS_PATH = Path(
-    r"C:\Users\Nasiba\Documents\1 Master Data Science\Master Thesis\VS Code New\master_thesis-rag\main\evaluation\graphrag\golden_answers_dataset_new.jsonl"
+from pathlib import Path
+import os
+
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+
+QUESTIONS_PATH = (
+    PROJECT_ROOT
+    / "main"
+    / "evaluation"
+    / "graphrag"
+    / "golden_answers_dataset_new.jsonl"
 )
+
 
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
 driver.verify_connectivity()

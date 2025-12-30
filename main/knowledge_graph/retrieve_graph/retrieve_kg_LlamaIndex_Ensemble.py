@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from llama_index.core.prompts import PromptTemplate
+
 from dotenv import load_dotenv, find_dotenv
 from neo4j import GraphDatabase
-
+from llama_index.core.prompts import PromptTemplate
 # LlamaIndex
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
@@ -26,7 +26,7 @@ from llama_index.graph_stores.neo4j import Neo4jPGStore
 from llama_index.core import PropertyGraphIndex
 from llama_index.core.indices.property_graph import VectorContextRetriever, PGRetriever
 
-from main.evaluation.logger import log_antwort
+from main.evaluation.logger2 import log_antwort
 
 
 # =============================================================================
@@ -42,10 +42,7 @@ AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 DATABASE = "llmakg"
 
-SCRIPT_NAME = "LLmaIndex_Hybrid_KG_Retriever_Rerank"
-
-from pathlib import Path
-import os
+SCRIPT_NAME = "LLmaIndex_Hybrid_KG_Community_Ensemble_Rerank"
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
 
@@ -54,7 +51,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "graphrag"
-    / "golden_answers_dataset_short.jsonl"
+    / "golden_answers_dataset.jsonl"
 )
 
 # Chunk schema (Neo4j)
@@ -65,23 +62,40 @@ FILE_PROP = "file"
 PRODUCT_PROP = "product"
 PRODCAT_PROP = "product_category"
 
-# Neo4j indexes
+# Neo4j indexes (Chunk)
 FULLTEXT_INDEX_NAME = "chunk_text_ft"
 VECTOR_INDEX_NAME = "entity"
 EMB_PROPERTY = "embedding"
 
-# Retrieval sizes
+# ---------------------------
+# Community indexes (Level=1)
+# ---------------------------
+COMM_FT_INDEX_NAME = "communityFulltext"
+COMM_VEC_INDEX_NAME = "community_vec"
+COMM_EMB_PROP = "embedding"
+
+# Community retrieval sizes
+K_COMM_FT = 30
+K_COMM_VEC = 30
+K_COMM_TOP = 20
+K_COMM_EXPAND_CHUNKS = 250
+
+# Fusion weight for community FT vs Vector inside router
+ALPHA_COMM = 0.60
+
+# Retrieval sizes (Chunk/KG)
 K_SPARSE = 30
 K_DENSE = 30
 K_KG = 15
 
-# Fusion weights
+# Fusion weights (main)
 ALPHA = 0.60
 W_KG = 0.80
+W_COMM = 0.40   # <-- community channel weight (start mild)
 
 # Candidate pool sizes
 ENSEMBLE_TOP_K = 80     # candidates BEFORE rerank
-FINAL_CONTEXT_K = 12
+FINAL_CONTEXT_K = 10
 
 # Rerank
 USE_RERANK = True
@@ -95,8 +109,6 @@ llm = OpenAI(model=os.getenv("OPENAI_MODEL"), temperature=0, max_tokens=1200)
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
 driver.verify_connectivity()
 
-
-
 QA_PROMPT = PromptTemplate(
     "You are a technical support assistant.\n"
     "Answer the question using ONLY the provided context.\n"
@@ -109,7 +121,6 @@ QA_PROMPT = PromptTemplate(
     "Question: {query_str}\n\n"
     "Answer:"
 )
-
 # =============================================================================
 # 2) LOGGING HELPER
 # =============================================================================
@@ -122,7 +133,6 @@ def safe_log(
     gold_answer: str,
     context_items: Optional[List[Dict[str, Any]]] = None,
 ):
-    # Einmal versuchen – und wenn es knallt, soll es sichtbar sein.
     log_antwort(
         script,
         question_id,
@@ -132,6 +142,7 @@ def safe_log(
         gold_answer or "",
         context_items=context_items,
     )
+
 
 # =============================================================================
 # 3) UTIL: MINMAX NORMALIZATION
@@ -194,7 +205,7 @@ List 3–8 important keywords or short phrases (comma-separated, no explanations
 
 
 # =============================================================================
-# 5) NEO4J FULLTEXT RETRIEVER (Sparse)
+# 5) NEO4J FULLTEXT RETRIEVER (Chunk Sparse)
 # =============================================================================
 class Neo4jFulltextRetriever(BaseRetriever):
     def __init__(self, driver, database: str, *, top_k: int):
@@ -236,7 +247,7 @@ class Neo4jFulltextRetriever(BaseRetriever):
                 meta = dict(node)
                 meta["chunk_id"] = chunk_id
                 meta["retriever"] = "sparse"
-                meta["node_type"] = "Chunk"  # <--- NEW
+                meta["node_type"] = "Chunk"
 
                 n = TextNode(text=text, metadata=meta)
                 if chunk_id:
@@ -245,7 +256,6 @@ class Neo4jFulltextRetriever(BaseRetriever):
                 rows.append((n, score))
                 raw_scores.append(score)
 
-        # normalize
         norm = minmax_norm(raw_scores)
         out: List[NodeWithScore] = []
         for (n, _), ns in zip(rows, norm):
@@ -254,7 +264,7 @@ class Neo4jFulltextRetriever(BaseRetriever):
 
 
 # =============================================================================
-# 6) NEO4J VECTOR RETRIEVER (Dense)
+# 6) NEO4J VECTOR RETRIEVER (Chunk Dense)
 # =============================================================================
 class Neo4jVectorRetriever(BaseRetriever):
     def __init__(self, driver, database: str, *, embed_model: OpenAIEmbedding, top_k: int):
@@ -298,7 +308,7 @@ class Neo4jVectorRetriever(BaseRetriever):
                 meta = dict(node)
                 meta["chunk_id"] = chunk_id
                 meta["retriever"] = "dense"
-                meta["node_type"] = "Chunk"  # <--- NEW
+                meta["node_type"] = "Chunk"
 
                 n = TextNode(text=text, metadata=meta)
                 if chunk_id:
@@ -315,13 +325,157 @@ class Neo4jVectorRetriever(BaseRetriever):
 
 
 # =============================================================================
-# 7) KG RETRIEVER (Property Graph) + normalization wrapper
+# 7) COMMUNITY STRONG ROUTER (FT + VECTOR -> EXPAND -> CHUNKS)
+# =============================================================================
+class CommunityStrongRouterRetriever(BaseRetriever):
+    """
+    Community FT + Community Vector (level=1) -> fuse -> expand via Entities -> Chunk candidates.
+    Returns Chunk TextNodes (so context logging stays consistent).
+    """
+
+    def __init__(
+        self,
+        driver,
+        database: str,
+        *,
+        embed_model: OpenAIEmbedding,
+        community_ft_index: str,
+        community_vec_index: str,
+        top_k_ft: int,
+        top_k_vec: int,
+        top_k_communities: int,
+        expand_k_chunks: int,
+        alpha: float,
+    ):
+        super().__init__()
+        self.driver = driver
+        self.database = database
+        self.embed_model = embed_model
+        self.community_ft_index = community_ft_index
+        self.community_vec_index = community_vec_index
+        self.top_k_ft = int(top_k_ft)
+        self.top_k_vec = int(top_k_vec)
+        self.top_k_communities = int(top_k_communities)
+        self.expand_k_chunks = int(expand_k_chunks)
+        self.alpha = float(alpha)
+
+    def _minmax(self, xs: List[float]) -> List[float]:
+        if not xs:
+            return []
+        mn, mx = min(xs), max(xs)
+        if mx == mn:
+            return [1.0 for _ in xs]
+        return [(x - mn) / (mx - mn) for x in xs]
+
+    def _retrieve(self, query_bundle: QueryBundle) -> List[NodeWithScore]:
+        q = str(query_bundle.query_str or "").strip()
+        if not q:
+            return []
+
+        qvec = self.embed_model.get_query_embedding(q)
+
+        cy_ft = """
+        CALL db.index.fulltext.queryNodes($index_name, $q)
+        YIELD node, score
+        WHERE node:__Community__
+          AND node.level = 1
+          AND (node.summary IS NOT NULL OR node.full_content IS NOT NULL)
+        RETURN elementId(node) AS cid, score
+        ORDER BY score DESC
+        LIMIT $k
+        """
+
+        cy_vec = """
+        CALL db.index.vector.queryNodes($index_name, $k, $qvec)
+        YIELD node, score
+        WHERE node:__Community__
+          AND node.level = 1
+          AND node.embedding IS NOT NULL
+        RETURN elementId(node) AS cid, score
+        ORDER BY score DESC
+        """
+
+        with self.driver.session(database=self.database) as session:
+            ft_rows = session.run(
+                cy_ft, index_name=self.community_ft_index, q=q, k=self.top_k_ft
+            ).data()
+            vec_rows = session.run(
+                cy_vec, index_name=self.community_vec_index, k=self.top_k_vec, qvec=qvec
+            ).data()
+
+        ft_scores = [float(r["score"] or 0.0) for r in ft_rows]
+        vec_scores = [float(r["score"] or 0.0) for r in vec_rows]
+        ft_norm = self._minmax(ft_scores)
+        vec_norm = self._minmax(vec_scores)
+
+        ft_map = {r["cid"]: s for r, s in zip(ft_rows, ft_norm)}
+        vec_map = {r["cid"]: s for r, s in zip(vec_rows, vec_norm)}
+
+        all_cids = set(ft_map) | set(vec_map)
+        if not all_cids:
+            return []
+
+        fused = []
+        for cid in all_cids:
+            s = float(ft_map.get(cid, 0.0))
+            d = float(vec_map.get(cid, 0.0))
+            fused_score = (self.alpha * d) + ((1.0 - self.alpha) * s)
+            fused.append((cid, fused_score))
+
+        fused.sort(key=lambda x: x[1], reverse=True)
+        top_cids = [cid for cid, _ in fused[: self.top_k_communities]]
+
+        cy_expand = """
+        MATCH (c:__Community__)
+        WHERE elementId(c) IN $community_ids
+        MATCH (c)-[:IN_COMMUNITY]-(e:__Entity__)
+        MATCH (e)-[:MENTIONS]-(ch:Chunk)
+        RETURN ch AS chunk, count(DISTINCT e) AS entity_hits
+        ORDER BY entity_hits DESC
+        LIMIT $k
+        """
+
+        with self.driver.session(database=self.database) as session:
+            ch_rows = session.run(
+                cy_expand, community_ids=top_cids, k=self.expand_k_chunks
+            ).data()
+
+        out: List[NodeWithScore] = []
+        raw: List[float] = []
+        for r in ch_rows:
+            ch = r["chunk"]
+            hits = int(r.get("entity_hits") or 0)
+
+            text = (ch.get(TEXT_PROP, "") or "").strip()
+            if not text:
+                continue
+
+            chunk_id = str(ch.get(ID_PROP) or ch.get("id") or "")
+            meta = dict(ch)
+            meta["chunk_id"] = chunk_id
+            meta["retriever"] = "community"
+            meta["node_type"] = "Chunk"
+            meta["entity_hits"] = hits
+
+            n = TextNode(text=text, metadata=meta)
+            if chunk_id:
+                n.id_ = chunk_id
+
+            out.append(NodeWithScore(node=n, score=float(hits)))
+            raw.append(float(hits))
+
+        # Normalize router scores 0..1 so fusion is stable
+        norm = self._minmax(raw)
+        for i, ns in enumerate(norm):
+            out[i].score = float(ns)
+
+        return out
+
+
+# =============================================================================
+# 8) KG RETRIEVER (Property Graph) + normalization wrapper
 # =============================================================================
 class KGNormalizedRetriever(BaseRetriever):
-    """
-    Wraps a KG retriever and normalizes its scores to 0..1 for stable fusion.
-    Ensures node_type is set so the logger can count types.
-    """
     def __init__(self, kg_retriever: BaseRetriever, *, top_k: int):
         super().__init__()
         self.kg_retriever = kg_retriever
@@ -345,7 +499,6 @@ class KGNormalizedRetriever(BaseRetriever):
             if "chunk_id" not in meta:
                 meta["chunk_id"] = meta.get(ID_PROP) or getattr(node, "id_", "") or ""
 
-            # if we do have chunk_id, treat it as Chunk context
             meta.setdefault("node_type", "Chunk" if meta.get("chunk_id") else "KG")
 
             new_node = TextNode(text=node.get_content() or "", metadata=meta)
@@ -357,7 +510,7 @@ class KGNormalizedRetriever(BaseRetriever):
 
 
 # =============================================================================
-# 8) FUSION RETRIEVER (Sparse + Dense + KG), dedupe = MERGE (not drop)
+# 9) FUSION RETRIEVER (Sparse + Dense + KG + Community), dedupe = MERGE
 # =============================================================================
 class HybridKGEnsembleRetriever(BaseRetriever):
     def __init__(
@@ -366,16 +519,20 @@ class HybridKGEnsembleRetriever(BaseRetriever):
         sparse: BaseRetriever,
         dense: BaseRetriever,
         kg: BaseRetriever,
+        community: BaseRetriever,
         alpha: float,
         w_kg: float,
+        w_comm: float,
         top_k: int,
     ):
         super().__init__()
         self.sparse = sparse
         self.dense = dense
         self.kg = kg
+        self.community = community
         self.alpha = float(alpha)
         self.w_kg = float(w_kg)
+        self.w_comm = float(w_comm)
         self.top_k = int(top_k)
 
     def _key(self, node: TextNode) -> str:
@@ -397,7 +554,7 @@ class HybridKGEnsembleRetriever(BaseRetriever):
         channel: str,
         items: List[NodeWithScore],
     ) -> None:
-        for nws in items:
+        for nws in items or []:
             node = nws.node
             key = self._key(node)
             score = float(nws.score or 0.0)
@@ -412,7 +569,6 @@ class HybridKGEnsembleRetriever(BaseRetriever):
                 meta.setdefault("product", meta.get(PRODUCT_PROP, ""))
                 meta.setdefault("product_category", meta.get(PRODCAT_PROP, ""))
 
-                # make sure logger sees chunk type
                 meta.setdefault("node_type", "Chunk")
 
                 new_node = TextNode(text=node.get_content() or "", metadata=meta)
@@ -424,6 +580,7 @@ class HybridKGEnsembleRetriever(BaseRetriever):
                     "sparse": None,
                     "dense": None,
                     "kg": None,
+                    "community": None,
                 }
 
             if channel == "sparse":
@@ -432,11 +589,17 @@ class HybridKGEnsembleRetriever(BaseRetriever):
                 merged[key]["dense"] = score
             elif channel == "kg":
                 merged[key]["kg"] = score
+            elif channel == "community":
+                merged[key]["community"] = score
 
             meta2 = merged[key]["node"].metadata
             meta2.setdefault("retrievers", [])
             if channel not in meta2["retrievers"]:
                 meta2["retrievers"].append(channel)
+
+            # carry over entity_hits if present
+            if isinstance(getattr(node, "metadata", None), dict) and "entity_hits" in node.metadata:
+                meta2.setdefault("entity_hits", node.metadata["entity_hits"])
 
     def _retrieve(self, query_bundle: QueryBundle) -> List[NodeWithScore]:
         original_q = str(query_bundle.query_str or "").strip()
@@ -452,24 +615,28 @@ class HybridKGEnsembleRetriever(BaseRetriever):
         sparse_items = self.sparse.retrieve(QueryBundle(q_sparse))
         dense_items = self.dense.retrieve(QueryBundle(q_dense))
         kg_items = self.kg.retrieve(QueryBundle(q_dense))
+        comm_items = self.community.retrieve(QueryBundle(q_dense))
 
         self._merge_channel(merged, "sparse", sparse_items)
         self._merge_channel(merged, "dense", dense_items)
         self._merge_channel(merged, "kg", kg_items)
+        self._merge_channel(merged, "community", comm_items)
 
         out: List[NodeWithScore] = []
         for obj in merged.values():
             s = float(obj["sparse"] or 0.0)
             d = float(obj["dense"] or 0.0)
             k = float(obj["kg"] or 0.0)
+            c = float(obj["community"] or 0.0)
 
             hybrid = (self.alpha * d) + ((1.0 - self.alpha) * s)
-            final_score = hybrid + (self.w_kg * k)
+            final_score = hybrid + (self.w_kg * k) + (self.w_comm * c)
 
             meta = obj["node"].metadata
             meta["sparse_norm"] = obj["sparse"]
             meta["dense_norm"] = obj["dense"]
             meta["kg_norm"] = obj["kg"]
+            meta["community_norm"] = obj["community"]
             meta["hybrid_score"] = hybrid
             meta["final_score"] = final_score
             meta["rewritten_query"] = pre["rewritten"]
@@ -482,7 +649,7 @@ class HybridKGEnsembleRetriever(BaseRetriever):
 
 
 # =============================================================================
-# 9) BUILD QUERY ENGINE ONCE
+# 10) BUILD QUERY ENGINE ONCE
 # =============================================================================
 QUERY_ENGINE: Optional[RetrieverQueryEngine] = None
 
@@ -499,9 +666,23 @@ def ensure_query_engine() -> RetrieverQueryEngine:
             "  pip install -U sentence-transformers\n"
         )
 
-    print("[INFO] Building Neo4j sparse+dense retrievers (FULLTEXT + VECTOR)...")
+    print("[INFO] Building Chunk sparse+dense retrievers (FULLTEXT + VECTOR)...")
     sparse = Neo4jFulltextRetriever(driver, DATABASE, top_k=K_SPARSE)
     dense = Neo4jVectorRetriever(driver, DATABASE, embed_model=embed_model, top_k=K_DENSE)
+
+    print("[INFO] Building Community strong router retriever...")
+    community = CommunityStrongRouterRetriever(
+        driver,
+        DATABASE,
+        embed_model=embed_model,
+        community_ft_index=COMM_FT_INDEX_NAME,
+        community_vec_index=COMM_VEC_INDEX_NAME,
+        top_k_ft=K_COMM_FT,
+        top_k_vec=K_COMM_VEC,
+        top_k_communities=K_COMM_TOP,
+        expand_k_chunks=K_COMM_EXPAND_CHUNKS,
+        alpha=ALPHA_COMM,
+    )
 
     print("[INFO] Building PropertyGraphIndex / KG retriever...")
     pg_store = Neo4jPGStore(
@@ -524,13 +705,15 @@ def ensure_query_engine() -> RetrieverQueryEngine:
     kg_base = PGRetriever(sub_retrievers=[kg_vector], llm=llm)
     kg = KGNormalizedRetriever(kg_base, top_k=K_KG)
 
-    print("[INFO] Building Hybrid+KG ensemble retriever...")
+    print("[INFO] Building Hybrid+KG+Community ensemble retriever...")
     ensemble = HybridKGEnsembleRetriever(
         sparse=sparse,
         dense=dense,
         kg=kg,
+        community=community,
         alpha=ALPHA,
         w_kg=W_KG,
+        w_comm=W_COMM,
         top_k=ENSEMBLE_TOP_K,
     )
 
@@ -551,7 +734,7 @@ def ensure_query_engine() -> RetrieverQueryEngine:
 
 
 # =============================================================================
-# 10) ASK + EXTRACT CONTEXT ITEMS FOR LOGGING
+# 11) ASK + EXTRACT CONTEXT ITEMS FOR LOGGING
 # =============================================================================
 def ask(question: str) -> Tuple[str, List[Dict[str, Any]]]:
     qe = ensure_query_engine()
@@ -567,27 +750,27 @@ def ask(question: str) -> Tuple[str, List[Dict[str, Any]]]:
         if not isinstance(meta, dict):
             meta = {}
 
-        # --- ROBUST: always log chunk text as "content" ---
         content = (node.get_content() or "").strip()
         if not content:
-            # fallback: sometimes metadata carries the actual chunk text
             content = str(meta.get(TEXT_PROP, "") or "").strip()
         if not content:
             continue
 
         context_items.append(
             {
-                "content": content,  # <- chunk text
-                "node_type": meta.get("node_type", "Chunk"),  # <- NEW (for logger types)
+                "content": content,
+                "node_type": meta.get("node_type", "Chunk"),
                 "source": meta.get(FILE_PROP, meta.get("source", "")),
                 "id": meta.get("chunk_id") or getattr(node, "id_", "") or "",
                 "score": float(getattr(nws, "score", 0.0) or 0.0),
                 "product": meta.get(PRODUCT_PROP, ""),
                 "product_category": meta.get(PRODCAT_PROP, ""),
                 "retrievers": meta.get("retrievers", meta.get("retriever", "ensemble")),
+                "entity_hits": meta.get("entity_hits", None),
                 "sparse_norm": meta.get("sparse_norm", None),
                 "dense_norm": meta.get("dense_norm", None),
                 "kg_norm": meta.get("kg_norm", None),
+                "community_norm": meta.get("community_norm", None),
                 "hybrid_score": meta.get("hybrid_score", None),
                 "final_score": meta.get("final_score", None),
             }
@@ -597,7 +780,7 @@ def ask(question: str) -> Tuple[str, List[Dict[str, Any]]]:
 
 
 # =============================================================================
-# 11) BATCH + MANUAL
+# 12) BATCH + MANUAL
 # =============================================================================
 def run_batch_from_file() -> None:
     print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
@@ -661,10 +844,13 @@ def manual_question() -> None:
 
 
 def main_loop() -> None:
-    print("Hybrid: Neo4j FULLTEXT + Neo4j VECTOR + KG (PropertyGraph) + Local Rerank")
+    print("Hybrid: Chunk FT + Chunk VECTOR + KG + CommunityRouter + Local Rerank")
     print("Type 'exit' to quit.\n")
-    print(f"DB={DATABASE} | FULLTEXT={FULLTEXT_INDEX_NAME} | VECTOR={VECTOR_INDEX_NAME} (prop {EMB_PROPERTY})")
-    print(f"Fusion: alpha={ALPHA}, w_kg={W_KG} | K: sparse={K_SPARSE}, dense={K_DENSE}, kg={K_KG}")
+    print(f"DB={DATABASE}")
+    print(f"Chunk: FULLTEXT={FULLTEXT_INDEX_NAME} | VECTOR={VECTOR_INDEX_NAME} (prop {EMB_PROPERTY})")
+    print(f"Community: FULLTEXT={COMM_FT_INDEX_NAME} | VECTOR={COMM_VEC_INDEX_NAME} (prop {COMM_EMB_PROP})")
+    print(f"Weights: alpha={ALPHA}, w_kg={W_KG}, w_comm={W_COMM}")
+    print(f"Community router: alpha_comm={ALPHA_COMM} | comm_ft={K_COMM_FT}, comm_vec={K_COMM_VEC}, comm_top={K_COMM_TOP}, expand_chunks={K_COMM_EXPAND_CHUNKS}")
     print(f"EnsembleTopK={ENSEMBLE_TOP_K} | RerankTopN={RERANK_TOP_N} | FinalContextK={FINAL_CONTEXT_K}\n")
 
     while True:
