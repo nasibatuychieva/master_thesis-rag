@@ -1071,7 +1071,7 @@ def aggregate_summary(results: List[EvaluationResult]) -> Dict[str, Any]:
 # -----------------------------
 def main() -> None:
     PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
-    ANSWERS_PATH = PROJECT_ROOT / "main" / "evaluation" / "graphrag" / "answers_log_new_dataset_short5.jsonl"
+    ANSWERS_PATH = PROJECT_ROOT / "main" / "evaluation" / "results" / "answers_log_new_dataset_8.jsonl"
     JSONL_IN = Path(os.getenv("ANSWERS_LOG_PATH", str(ANSWERS_PATH))).expanduser().resolve()
 
     log("Reading input JSONL", path=str(JSONL_IN))
@@ -1146,7 +1146,7 @@ def main() -> None:
 
     out_df = results_to_dataframe(results)
 
-    out_dir = PROJECT_ROOT / "main" / "evaluation" / "graphrag" / "out"
+    out_dir = PROJECT_ROOT / "main" / "evaluation" / "judge_results" 
     out_dir.mkdir(parents=True, exist_ok=True)
 
     CSV_OUT = out_dir / f"llm_judge_results_{JSONL_IN.stem}_rows_{start_row}_to_{end_idx}.csv"

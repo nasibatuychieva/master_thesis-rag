@@ -37,7 +37,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "graphrag"
-    / "golden_answers_dataset_short3.jsonl"
+    / "golden_answers_dataset_short.jsonl"
 )
 
 
