@@ -29,7 +29,7 @@ TEXT_PROPERTY = "text"
 
 FULLTEXT_INDEX_NAME = "chunk_text_ft"
 
-SCRIPT_NAME = "RAG_Sparse_Advanced"
+SCRIPT_NAME = "RAG_Advanced_Sparse"
 
 from pathlib import Path
 import os
@@ -40,8 +40,8 @@ QUESTIONS_PATH = (
     PROJECT_ROOT
     / "main"
     / "evaluation"
-    / "graphrag"
-    / "golden_answers_dataset_new.jsonl"
+    / "evaluation_datasets"
+    / "golden_answers_dataset_short.jsonl"
 )
 
 

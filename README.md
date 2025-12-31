@@ -23,10 +23,10 @@ The experiments are conducted on publicly available technical documentation (e.g
 
 - **RAG (Retrieval-Augmented Generation)**
 - **Knowledge Graph Construction & Retrieval**
-- **Hybrid Retrieval (BM25 + Dense + Graph-based)**
+- **Knowledge Graph Community Detection Construction**
+- **Hybrid Retrieval ( Sparse + Dense + GraphRAG based)**
 - **LLM-based Answer Generation**
 - **LLM-as-a-Judge Evaluation**
-- **Community Detection in Knowledge Graphs**
 
 ---
 
@@ -35,25 +35,29 @@ The experiments are conducted on publicly available technical documentation (e.g
 ```text
 MASTER_THESIS-RAG/
 │
-├── .venv_Python11_New/          # Python virtual environment
-
-│
 ├── main/
 │   ├── chunking/               # Document chunking and preprocessing
-│   ├── documents/              # Raw and processed input documents
-│   ├── evaluation/             # Evaluation pipelines, datasets, judges
-│   ├── knowledge_graph/        # Knowledge Graph construction, Community Detection & KG retrieval
-│   ├── only_rag_pipelines/     # Baseline RAG pipelines (without KG)
-│   ├── out_aktuell/            # Chunking  outputs (latest runs)
-│   ├── out_aktuell_processed_files/  # Processed experiment results
-│   ├── ressources/             # Auxiliary resources (configs, helpers)
-│  
 │
+│   ├── documents/              # Raw and processed Arduino documentation
+│
+│   ├── evaluation/             # Evaluation of RAG and RAG+KG approaches
+│   │   ├── evaluation_datasets/  # Question–answer datasets with gold answers
+│   │   ├── llm_as_judge/          # LLM-as-a-Judge evaluation framework
+│   │   ├── judge_results/         # Aggregated evaluation scores
+│   │   ├── log_results/           # Logged model responses and contexts
+│   │   └── debug_traces/          # Debug and trace outputs
+│
+│   ├── knowledge_graph/        # Knowledge Graph construction and retrieval
+│   │   ├── create_graph/         # Knowledge Graph creation
+│   │   ├── build_communities/    # Community detection in the KG
+│   │   └── retrieve_graph/       # KG-based and hybrid KG+RAG retrieval
+│
+│   ├── only_rag_pipelines/     # RAG pipelines without Knowledge Graph
+│   │   ├── naive_rag/            # Baseline vector-based RAG
+│   │   ├── create_rag/           # Retriever and index creation
+│   │   └── advanced_rag/         # Enhanced RAG variants
+│   
+|   requirements.txt            # Python package dependencies
+└── README.md                   # Project description and instructions
 
-├── docker.txt                  # Notes / instructions for Docker usage
-├── .env                        # Environment variables (not committed)
-├── .gitignore
-│
-├── pyproject.toml              # Project configuration
-├── requirements-retriever.txt  # Python dependencies
-└── README.md                   # This file
+

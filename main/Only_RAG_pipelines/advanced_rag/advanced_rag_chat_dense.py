@@ -27,7 +27,7 @@ NODE_LABEL = "Chunk"
 TEXT_PROPERTY = "text"
 EMB_PROPERTY = "embedding"
 
-SCRIPT_NAME = "RAG_Vector_Advanced"
+SCRIPT_NAME = "RAG_Advanced_Dense"
 
 from pathlib import Path
 import os
@@ -38,8 +38,8 @@ QUESTIONS_PATH = (
     PROJECT_ROOT
     / "main"
     / "evaluation"
-    / "graphrag"
-    / "golden_answers_dataset_new.jsonl"
+    / "evaluation_datasets"
+    / "golden_answers_dataset_short.jsonl"
 )
 
 # ----------------------------------------------------------------------------

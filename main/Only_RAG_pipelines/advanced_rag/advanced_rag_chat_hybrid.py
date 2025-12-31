@@ -37,7 +37,7 @@ RETRIEVE_K_SPARSE = 30
 RETRIEVE_K_DENSE = 30
 RERANK_TOP_K = 6
 
-SCRIPT_NAME = "RAG_Hybrid_Advanced"
+SCRIPT_NAME = "RAG_Advanced_Hybrid"
 
 from pathlib import Path
 import os
@@ -48,8 +48,8 @@ QUESTIONS_PATH = (
     PROJECT_ROOT
     / "main"
     / "evaluation"
-    / "graphrag"
-    / "golden_answers_dataset_new.jsonl"
+    / "evaluation_datasets"
+    / "golden_answers_dataset_short.jsonl"
 )
 
 
