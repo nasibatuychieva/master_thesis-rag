@@ -1,15 +1,15 @@
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
+import re
 from dotenv import load_dotenv, find_dotenv
 from neo4j import GraphDatabase
-
+from neo4j_graphrag.generation import RagTemplate
 from neo4j_graphrag.embeddings.openai import OpenAIEmbeddings
-from neo4j_graphrag.retrievers import VectorCypherRetriever
+from neo4j_graphrag.retrievers import VectorCypherRetriever, HybridCypherRetriever
 from neo4j_graphrag.llm import OpenAILLM
 from neo4j_graphrag.generation import GraphRAG
-from neo4j_graphrag.generation import RagTemplate
+
 from main.evaluation.logger import log_antwort
 
 # ---------------------------------------------------------------------------
@@ -25,8 +25,7 @@ AUTH_USER = os.getenv("NEO4J_USER")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "simplekg"
 
-SCRIPT_NAME = "SimpleKG_Vector_KG_Retriever"
-
+SCRIPT_NAME = "SimpleKG_Hybrid_Retriever"
 from pathlib import Path
 import os
 
@@ -37,9 +36,8 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "graphrag"
-    / "golden_answers_dataset.jsonl"
+    / "golden_answers_dataset_short3.jsonl"
 )
-
 
 # Neo4j-Driver
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
@@ -48,7 +46,6 @@ driver.verify_connectivity()
 # LLM (Answer Generation)
 llm = OpenAILLM(
     model_name=os.getenv("OPENAI_MODEL"),
-    model_params={"temperature": 0},
 )
 
 # Embedder (Vector Search)
@@ -59,55 +56,59 @@ embedder = OpenAIEmbeddings(model="text-embedding-3-small")
 # ---------------------------------------------------------------------------
 
 retrieval_query = """
+
 WITH node, score
 
-// lokale Produkte an diesem Chunk
-OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(p0:Product)
+// 1) Entities direkt am Seed-Chunk
+OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e1:__Entity__)
 
-// Kategorien dieser Produkte
-WITH node, score,
-     collect(DISTINCT p0) AS local_products,
-     collect(DISTINCT p0.category) AS cats
+// 2) Weitere Chunks zu diesen Entities
+OPTIONAL MATCH (e1)-[:FROM_CHUNK]->(node2:Chunk)
 
-UNWIND cats AS cat
-OPTIONAL MATCH (p_all:Product {category: cat})
+// 3) Weitere Entities, die direkt mit e1 verbunden sind
+OPTIONAL MATCH (e1)--(e2:__Entity__)
 
-// weitere Entities zum Kontext
-OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e:__Entity__)
+// Sammeln
+WITH
+  node, score,
+  collect(DISTINCT e1)    AS direct_entities,
+  collect(DISTINCT node2) AS related_chunks,
+  collect(DISTINCT e2)    AS related_entities
 
-// alles wieder einsammeln (und local_products im Scope behalten!)
-WITH node, score,
-     local_products,
-     collect(DISTINCT cat)      AS categories,
-     collect(DISTINCT p_all)    AS products_in_category,
-     collect(DISTINCT e)        AS entities
-
-RETURN DISTINCT
+RETURN
   node.text AS text,
   score     AS score,
-  categories,
-  [p IN products_in_category | p.name] AS products_in_category,
-  [p IN local_products        | p.name] AS local_products,
-  [en IN entities             | en.name] AS entities
-"""
+  [e IN direct_entities | {name: e.name, labels: labels(e)}] AS direct_entities,
+  [n IN related_chunks  | n.text] AS related_chunk_texts,
+  [e IN related_entities | {name: e.name, labels: labels(e)}] AS related_entities
 
-retriever = VectorCypherRetriever(
+"""
+LUCENE_SPECIAL = r'(\+|\-|\&\&|\|\||\!|\(|\)|\{|\}|\[|\]|\^|"|~|\*|\?|\:|\\|\/)'
+
+def lucene_escape(s: str) -> str:
+    s = re.sub(r"\s+", " ", s.strip())
+    s = re.sub(LUCENE_SPECIAL, r"\\\1", s)  
+    return s
+
+retriever = HybridCypherRetriever(
     driver,
     neo4j_database=DATABASE,
-    index_name="chunkEmbedding_simplekg",
+    vector_index_name="chunkEmbedding_simplekg",
+    fulltext_index_name="chunkFulltext_simplekg",
     embedder=embedder,
     retrieval_query=retrieval_query,
 )
 
 prompt_template = RagTemplate(
     template=(
-        "You are a technical support assistant.\n"
-        "Answer the question using ONLY the provided context.\n"
-        "Write a detailed, structured answer.\n"
-        "- If the question asks for variants, list all variants.\n"
-        "- Include key specs, ranges, and differences.\n"
-        "- Use bullet points and short headings.\n"
-        "If context is insufficient, say what is missing.\n\n"
+        "You are a technical support assistant for Arduino Products.\n"
+    "Use ONLY the provided context. Do not use outside knowledge.\n"
+    "If the context does not contain the answer, say exactly what information is missing.\n"
+    "Answer in complete sentences.\n"
+    "Answer as completely as possible.\n"
+    "Adapt the structure and style of the answer to the type of the question "
+    "(e.g., list items for 'which' questions, explain processes for 'how' questions, "
+    "and compare variants for 'difference' questions).\n\n"
         "Examples:\n"
         "{examples}\n\n"
         "Context:\n"
@@ -144,15 +145,14 @@ def safe_log(
         gold_answer or "",
         context_items=context_items,
     )
-
 # ---------------------------------------------------------------------------
-# 4) Context retrieval: call retriever directly
+# 4) Context retrieval (LlamaIndex-style): call retriever directly
 # ---------------------------------------------------------------------------
 
 def retrieve_context_items(question: str, top_k: int = 20) -> List[Dict[str, Any]]:
     """
     Retrieve context directly from VectorCypherRetriever (not from GraphRAG response).
-    We log ONLY the chunk text (node.text) as content.
+    This is the reliable way to always have context for faithfulness evaluation.
     """
     results = None
 
@@ -176,28 +176,59 @@ def retrieve_context_items(question: str, top_k: int = 20) -> List[Dict[str, Any
     if isinstance(results, list):
         for r in results:
             if isinstance(r, dict):
-                # ✅ ONLY chunk text
                 text = str(r.get("text") or "").strip()
                 if not text:
                     continue
 
+                direct_entities = r.get("direct_entities", [])
+                related_entities = r.get("related_entities", [])
+                related_chunk_texts = r.get("related_chunk_texts", [])
                 score = r.get("score", "")
 
+                
+    
+                def fmt_entities(arr):
+                    out = []
+                    for e in arr or []:
+                        name = e.get("name", "")
+                        labels = e.get("labels", [])
+                        if name:
+                            out.append(f"{name} ({', '.join(labels)})")
+                    return out
+
+                meta_lines = []
+                if direct_entities:
+                    meta_lines.append(f"Direct entities: {fmt_entities(direct_entities)}")
+                if related_entities:
+                    meta_lines.append(f"Related entities: {fmt_entities(related_entities)}")
+                if related_chunk_texts:
+                    meta_lines.append(f"Related chunks: {related_chunk_texts}")
+
+
+                enriched_text = text
+                if meta_lines:
+                    enriched_text = text + "\n" + "\n".join(meta_lines)
+
                 context_items.append({
-                    "content": text,  
-                    "source": "simplekg_vector_index",
-                    "score": score,
-                })
+    "content": enriched_text,
+    "source": "simplekg_vector_index",
+    "id": "",
+    "score": score,
+    "direct_entities": direct_entities,
+    "related_entities": related_entities,
+    "related_chunk_texts": related_chunk_texts,
+})
+
             else:
                 s = str(r).strip()
                 if s:
-                    context_items.append({"content": s, "source": "simplekg_vector_index", "score": ""})
+                    context_items.append({"content": s, "source": "simplekg_vector_index", "id": "", "score": ""})
 
     else:
 
         s = str(results).strip()
         if s:
-            context_items.append({"content": s, "source": "simplekg_retriever_raw", "score": ""})
+            context_items.append({"content": s, "source": "simplekg_retriever_raw", "id": "", "score": ""})
 
     return context_items
 
@@ -210,20 +241,23 @@ def answer_with_graphrag(question: str, top_k: int = 20) -> Tuple[str, List[Dict
     Returns (answer, context_items).
     Answer from GraphRAG; context from retriever directly (reliable).
     """
+    safe_q = lucene_escape(question)
     response = rag.search(
-        query_text=question,
+        query_text=safe_q,
         retriever_config={"top_k": top_k},
- 
+        # return_context=True  # optional, but we do NOT depend on it
     )
     answer = (getattr(response, "answer", None) or "").strip()
 
 
-    context_items = retrieve_context_items(question, top_k=top_k)
+    context_items = retrieve_context_items(safe_q, top_k=top_k)
+
 
     if not context_items:
         context_items = [{
             "content": "[NO CONTEXT RETURNED BY RETRIEVER]",
             "source": "system",
+            "id": "",
             "score": "",
         }]
 
@@ -273,7 +307,7 @@ def run_batch_from_file(top_k: int = 20):
                 question,
                 answer,
                 gold_answer,
-                context_items=context_items,
+                context_items=context_items,   #  pass context
             )
 
     print("\n[INFO] Batch processing completed.\n")

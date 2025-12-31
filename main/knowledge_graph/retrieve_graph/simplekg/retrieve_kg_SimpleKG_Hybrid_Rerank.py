@@ -9,8 +9,10 @@ from neo4j_graphrag.embeddings.openai import OpenAIEmbeddings
 from neo4j_graphrag.retrievers import VectorCypherRetriever, HybridCypherRetriever
 from neo4j_graphrag.llm import OpenAILLM
 from neo4j_graphrag.generation import GraphRAG
+from neo4j_graphrag.retrievers.base import Retriever
 
 from main.evaluation.logger import log_antwort
+from sentence_transformers import CrossEncoder
 
 # ---------------------------------------------------------------------------
 # 1) Konfiguration & Environment
@@ -25,7 +27,7 @@ AUTH_USER = os.getenv("NEO4J_USER")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "simplekg"
 
-SCRIPT_NAME = "SimpleKG_Hybrid_KG_Retriever"
+SCRIPT_NAME = "SimpleKG_Hybrid_Retriever_Rerank"
 from pathlib import Path
 import os
 
@@ -36,7 +38,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "graphrag"
-    / "golden_answers_dataset.jsonl"
+    / "golden_answers_dataset_short3.jsonl"
 )
 
 # Neo4j-Driver
@@ -46,7 +48,6 @@ driver.verify_connectivity()
 # LLM (Answer Generation)
 llm = OpenAILLM(
     model_name=os.getenv("OPENAI_MODEL"),
-    model_params={"temperature": 0},
 )
 
 # Embedder (Vector Search)
@@ -57,36 +58,40 @@ embedder = OpenAIEmbeddings(model="text-embedding-3-small")
 # ---------------------------------------------------------------------------
 
 retrieval_query = """
+
 WITH node, score
 
-// lokale Produkte an diesem Chunk
-OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(p0:Product)
+// 1) Entities direkt am Seed-Chunk (limitiert)
+OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e1:__Entity__)
+WITH node, score, collect(DISTINCT e1)[0..20] AS e1s
 
-// Kategorien dieser Produkte
-WITH node, score,
-     collect(DISTINCT p0) AS local_products,
-     collect(DISTINCT p0.category) AS cats
+// 2) Related chunks: pro Seed nur Top N (nach shared-entity-count)
+CALL {
+  WITH e1s
+  UNWIND e1s AS e
+  MATCH (e)-[:FROM_CHUNK]->(node2:Chunk)
+  WITH node2, count(DISTINCT e) AS evidence
+  ORDER BY evidence DESC
+  LIMIT 10
+  RETURN collect(node2) AS top_related_chunks
+}
 
-UNWIND cats AS cat
-OPTIONAL MATCH (p_all:Product {category: cat})
+// 3) Related entities: ebenfalls limitieren
+CALL {
+  WITH e1s
+  UNWIND e1s AS e
+  MATCH (e)--(e2:__Entity__)
+  RETURN collect(DISTINCT e2)[0..30] AS rel_ents
+}
 
-// weitere Entities zum Kontext
-OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e:__Entity__)
-
-// alles wieder einsammeln (und local_products im Scope behalten!)
-WITH node, score,
-     local_products,
-     collect(DISTINCT cat)      AS categories,
-     collect(DISTINCT p_all)    AS products_in_category,
-     collect(DISTINCT e)        AS entities
-
-RETURN DISTINCT
+RETURN
   node.text AS text,
   score     AS score,
-  categories,
-  [p IN products_in_category | p.name] AS products_in_category,
-  [p IN local_products        | p.name] AS local_products,
-  [en IN entities             | en.name] AS entities
+  [e IN e1s | {name: e.name, labels: labels(e)}] AS direct_entities,
+  [n IN top_related_chunks | n.text] AS related_chunk_texts,
+  [e IN rel_ents | {name: e.name, labels: labels(e)}] AS related_entities
+
+
 """
 LUCENE_SPECIAL = r'(\+|\-|\&\&|\|\||\!|\(|\)|\{|\}|\[|\]|\^|"|~|\*|\?|\:|\\|\/)'
 
@@ -106,13 +111,14 @@ retriever = HybridCypherRetriever(
 
 prompt_template = RagTemplate(
     template=(
-        "You are a technical support assistant.\n"
-        "Answer the question using ONLY the provided context.\n"
-        "Write a detailed, structured answer.\n"
-        "- If the question asks for variants, list all variants.\n"
-        "- Include key specs, ranges, and differences.\n"
-        "- Use bullet points and short headings.\n"
-        "If context is insufficient, say what is missing.\n\n"
+         "You are a technical support assistant for Arduino Products.\n"
+    "Use ONLY the provided context. Do not use outside knowledge.\n"
+    "If the context does not contain the answer, say exactly what information is missing.\n"
+    "Answer in complete sentences.\n"
+    "Answer as completely as possible.\n"
+    "Adapt the structure and style of the answer to the type of the question "
+    "(e.g., list items for 'which' questions, explain processes for 'how' questions, "
+    "and compare variants for 'difference' questions).\n\n"
         "Examples:\n"
         "{examples}\n\n"
         "Context:\n"
@@ -122,6 +128,77 @@ prompt_template = RagTemplate(
         "Answer:\n"
     )
 )
+
+# -------------------------------
+# RERANKING ADD-ON (BGE reranker)
+# -------------------------------
+
+reranker = CrossEncoder("BAAI/bge-reranker-base")
+
+class RerankingRetriever(Retriever):
+    def __init__(self, base_retriever, reranker_model, multiplier: int = 4):
+        
+        super().__init__(
+            driver=base_retriever.driver,
+            neo4j_database=base_retriever.neo4j_database
+        )
+
+        self.base = base_retriever
+        self.reranker = reranker_model
+        self.multiplier = multiplier
+
+    def _rerank(self, raw_query: str, results: List[Dict[str, Any]], top_k: int):
+        candidates = [r for r in results if isinstance(r, dict) and r.get("text")]
+        if not candidates:
+            return results
+
+        pairs = [[raw_query, r["text"]] for r in candidates]
+        scores = self.reranker.predict(pairs)
+
+        for r, s in zip(candidates, scores):
+            r["rerank_score"] = float(s)
+
+        candidates.sort(key=lambda r: r["rerank_score"], reverse=True)
+        return candidates[:top_k]
+    
+    def search(self, query_text: str, top_k: int = 20, **kwargs):
+    
+        raw_query = kwargs.pop("raw_query", query_text)
+
+        
+        k = max(top_k * self.multiplier, top_k)
+
+    
+        base_result = self.base.search(query_text=query_text, top_k=k, **kwargs)
+
+
+        if isinstance(base_result, list):
+            items = base_result
+            return self._rerank(raw_query, items, top_k)
+
+        items = getattr(base_result, "items", None)
+        if isinstance(items, list):
+            reranked = self._rerank(raw_query, items, top_k)
+            base_result.items = reranked
+            return base_result
+
+    
+        return base_result
+
+
+    def retrieve(self, query_text: str, top_k: int = 20, **kwargs):
+        raw_query = kwargs.pop("raw_query", query_text)
+        k = max(top_k * self.multiplier, top_k)
+
+        if hasattr(self.base, "retrieve"):
+            res = self.base.retrieve(query_text=query_text, top_k=k, **kwargs)
+        else:
+            res = self.base.search(query_text=query_text, top_k=k, **kwargs)
+
+        return self._rerank(raw_query, res, top_k) if isinstance(res, list) else res
+
+
+retriever = RerankingRetriever(retriever, reranker, multiplier=4)
 
 
 rag = GraphRAG(retriever=retriever, llm=llm,prompt_template=prompt_template)
@@ -184,37 +261,46 @@ def retrieve_context_items(question: str, top_k: int = 20) -> List[Dict[str, Any
                 if not text:
                     continue
 
-                categories = r.get("categories", [])
-                products_in_category = r.get("products_in_category", [])
-                local_products = r.get("local_products", [])
-                entities = r.get("entities", [])
+                direct_entities = r.get("direct_entities", [])
+                related_entities = r.get("related_entities", [])
+                related_chunk_texts = r.get("related_chunk_texts", [])
                 score = r.get("score", "")
 
+                
     
+                def fmt_entities(arr):
+                    out = []
+                    for e in arr or []:
+                        name = e.get("name", "")
+                        labels = e.get("labels", [])
+                        if name:
+                            out.append(f"{name} ({', '.join(labels)})")
+                    return out
+
                 meta_lines = []
-                if categories:
-                    meta_lines.append(f"Categories: {categories}")
-                if local_products:
-                    meta_lines.append(f"Local products: {local_products}")
-                if products_in_category:
-                    meta_lines.append(f"Products in category: {products_in_category}")
-                if entities:
-                    meta_lines.append(f"Entities: {entities}")
+                if direct_entities:
+                    meta_lines.append(f"Direct entities: {fmt_entities(direct_entities)}")
+                if related_entities:
+                    meta_lines.append(f"Related entities: {fmt_entities(related_entities)}")
+                if related_chunk_texts:
+                    meta_lines.append(f"Related chunks count: {len(related_chunk_texts)}")
+
+
 
                 enriched_text = text
                 if meta_lines:
                     enriched_text = text + "\n" + "\n".join(meta_lines)
 
                 context_items.append({
-                    "content": enriched_text,
-                    "source": "simplekg_vector_index",
-                    "id": "",          # no chunk_id returned in your query
-                    "score": score,
-                    "categories": categories,
-                    "local_products": local_products,
-                    "products_in_category": products_in_category,
-                    "entities": entities,
-                })
+    "content": enriched_text,
+    "source": "simplekg_vector_index",
+    "id": "",
+    "score": score,
+    "direct_entities": direct_entities,
+    "related_entities": related_entities,
+    "related_chunk_texts": related_chunk_texts,
+})
+
             else:
                 s = str(r).strip()
                 if s:

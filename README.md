@@ -47,7 +47,7 @@ MASTER_THESIS-RAG/
 │   ├── out_aktuell/            # Chunking  outputs (latest runs)
 │   ├── out_aktuell_processed_files/  # Processed experiment results
 │   ├── ressources/             # Auxiliary resources (configs, helpers)
-│   └── __init__.py
+│  
 │
 
 ├── docker.txt                  # Notes / instructions for Docker usage

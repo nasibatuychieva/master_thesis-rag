@@ -37,7 +37,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "graphrag"
-    / "golden_answers_dataset.jsonl"
+    / "golden_answers_dataset_short3.jsonl"
 )
 
 
@@ -48,7 +48,7 @@ driver.verify_connectivity()
 # LLM for GraphRAG answer generation
 llm = OpenAILLM(
     model_name=os.getenv("OPENAI_MODEL"),
-    model_params={"temperature": 0},
+
 )
 
 # Embedder for vector search
@@ -60,17 +60,55 @@ embedder = OpenAIEmbeddings(model="text-embedding-3-small")
 
 retrieval_query = """
 WITH node, score
-OPTIONAL MATCH (node)-[:MENTIONS]->(e:Entity)
-OPTIONAL MATCH (node)-[:FROM_DOCUMENT]->(d:Document)
-WITH node, score,
-     collect(DISTINCT e) AS entities,
-     collect(DISTINCT d) AS docs
+WHERE node:Chunk
+  AND node.text IS NOT NULL
+  AND trim(node.text) <> ""
+
+OPTIONAL MATCH (node)-[:MENTIONS]-(e1)
+WHERE NOT e1:Chunk
+
+OPTIONAL MATCH (e1)-[:MENTIONS]-(node2:Chunk)
+WHERE node2 <> node
+  AND node2.text IS NOT NULL
+  AND trim(node2.text) <> ""
+
+OPTIONAL MATCH (e1)--(e2)
+WHERE NOT e2:Chunk AND e2 <> e1
+
+WITH
+  node,
+  score,
+  collect(DISTINCT e1)    AS direct_entities,
+  collect(DISTINCT node2) AS related_chunks,
+  collect(DISTINCT e2)    AS related_entities
+
 RETURN DISTINCT
-  node.id   AS chunk_id,
-  node.text AS text,
-  score     AS score,
-  [en IN entities | en.id] AS entities,
-  [d IN docs | d.id]       AS documents
+  coalesce(node.chunk_id, node.id, elementId(node)) AS chunk_id,
+  node.text                                         AS text,
+  coalesce(node.file_name, node.file, "")           AS file_name,
+  score                                             AS score,
+
+  [e IN direct_entities |
+    {
+      id: coalesce(e.id, e.name, e.entity_id, elementId(e)),
+      entityType: e.entityType
+    }
+  ] AS direct_entities,
+
+  [n IN related_chunks | n.text][0..10] AS related_chunk_texts,
+
+  [e IN related_entities |
+    {
+      id: coalesce(e.id, e.name, e.entity_id, elementId(e)),
+      entityType: e.entityType
+    }
+  ] AS related_entities,
+
+  CASE
+    WHEN coalesce(node.file_name, node.file, "") = "" THEN []
+    ELSE [coalesce(node.file_name, node.file, "")]
+  END AS documents
+
 """
 
 retriever = VectorCypherRetriever(
@@ -83,13 +121,14 @@ retriever = VectorCypherRetriever(
 
 prompt_template = RagTemplate(
     template=(
-        "You are a technical support assistant.\n"
-        "Answer the question using ONLY the provided context.\n"
-        "Write a detailed, structured answer.\n"
-        "- If the question asks for variants, list all variants.\n"
-        "- Include key specs, ranges, and differences.\n"
-        "- Use bullet points and short headings.\n"
-        "If context is insufficient, say what is missing.\n\n"
+        "You are a technical support assistant for Arduino Products.\n"
+    "Use ONLY the provided context. Do not use outside knowledge.\n"
+    "If the context does not contain the answer, say exactly what information is missing.\n"
+    "Answer in complete sentences.\n"
+    "Answer as completely as possible.\n"
+    "Adapt the structure and style of the answer to the type of the question "
+    "(e.g., list items for 'which' questions, explain processes for 'how' questions, "
+    "and compare variants for 'difference' questions).\n\n"
         "Examples:\n"
         "{examples}\n\n"
         "Context:\n"

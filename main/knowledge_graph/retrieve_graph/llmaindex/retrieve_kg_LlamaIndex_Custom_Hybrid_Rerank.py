@@ -42,7 +42,7 @@ AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 DATABASE = "llmakg"
 
-SCRIPT_NAME = "LLmaIndex_Hybrid_KG_Retriever_Rerank"
+SCRIPT_NAME = "LlamaIndex_Custom_Hybrid_Retriever_Rerank"
 
 from pathlib import Path
 import os
@@ -80,14 +80,14 @@ ALPHA = 0.60
 W_KG = 0.80
 
 # Candidate pool sizes
-ENSEMBLE_TOP_K = 80     # candidates BEFORE rerank
+ENSEMBLE_TOP_K = 60     # candidates BEFORE rerank
 FINAL_CONTEXT_K = 12
 
 # Rerank
 USE_RERANK = True
 RERANK_TOP_N = 12
 RERANK_MODEL = "BAAI/bge-reranker-base"
-
+USE_PRE_RETRIEVAL = False 
 # LLM + Embeddings
 embed_model = OpenAIEmbedding(model="text-embedding-3-small")
 llm = OpenAI(model=os.getenv("OPENAI_MODEL"), temperature=0, max_tokens=1200)
@@ -98,16 +98,19 @@ driver.verify_connectivity()
 
 
 QA_PROMPT = PromptTemplate(
-    "You are a technical support assistant.\n"
-    "Answer the question using ONLY the provided context.\n"
-    "Write a detailed, structured answer.\n"
-    "- If the question asks for variants, list all variants.\n"
-    "- Include key specs, ranges, and differences.\n"
-    "- Use bullet points and short headings.\n"
-    "If context is insufficient, say what is missing.\n\n"
-    "Context:\n{context_str}\n\n"
-    "Question: {query_str}\n\n"
-    "Answer:"
+    "You are a technical support assistant for Arduino Products.\n"
+    "Use ONLY the provided context. Do not use outside knowledge.\n"
+    "If the context does not contain the answer, say exactly what information is missing.\n"
+    "Answer in complete sentences.\n"
+    "Answer as completely as possible.\n"
+    "Adapt the structure and style of the answer to the type of the question "
+    "(e.g., list items for 'which' questions, explain processes for 'how' questions, "
+    "and compare variants for 'difference' questions).\n\n"
+    "Context:\n"
+    "{context_str}\n\n"
+    "Question:\n"
+    "{query_str}\n\n"
+    "Answer:\n"
 )
 
 # =============================================================================
@@ -443,9 +446,19 @@ class HybridKGEnsembleRetriever(BaseRetriever):
         if not original_q:
             return []
 
-        pre = pre_retrieval(original_q)
-        q_dense = pre["rewritten"]
-        q_sparse = pre["ft_query"]
+        if USE_PRE_RETRIEVAL:
+            pre = pre_retrieval(original_q)
+            q_dense = pre["rewritten"]
+            q_sparse = pre["ft_query"]
+        else:
+            pre = {
+        "original": original_q,
+        "rewritten": original_q,
+        "keywords": [],
+        "ft_query": original_q,
+        }
+            q_dense = original_q
+            q_sparse = original_q
 
         merged: Dict[str, Dict[str, Any]] = {}
 
@@ -485,6 +498,79 @@ class HybridKGEnsembleRetriever(BaseRetriever):
 # 9) BUILD QUERY ENGINE ONCE
 # =============================================================================
 QUERY_ENGINE: Optional[RetrieverQueryEngine] = None
+
+# =============================================================================
+# X) CHUNK FILTER (pre-rerank)
+# =============================================================================
+def _is_chunk_node(meta: Dict[str, Any]) -> bool:
+    # strong signal
+    if meta.get("chunk_id"):
+        return True
+
+    nt = str(meta.get("node_type", "") or "").strip().lower()
+    if nt == "chunk":
+        return True
+
+    label = str(meta.get("label", "") or "").strip().lower()
+    if label == "chunk":
+        return True
+
+    labels = meta.get("labels")
+    if isinstance(labels, (list, tuple, set)):
+        if any(str(x).strip().lower() == "chunk" for x in labels):
+            return True
+
+    return False
+
+
+def _extract_chunk_text(node: Any, meta: Dict[str, Any]) -> str:
+    txt = ""
+    try:
+        txt = (node.get_content() or "").strip()
+    except Exception:
+        txt = ""
+
+    if not txt:
+        txt = str(meta.get("text", "") or meta.get(TEXT_PROP, "") or "").strip()
+
+    return txt
+
+
+# LlamaIndex postprocessor interface
+from llama_index.core.postprocessor.types import BaseNodePostprocessor
+from llama_index.core.schema import NodeWithScore
+
+class ChunkOnlyPostprocessor(BaseNodePostprocessor):
+    """Keep only nodes that look like Chunk nodes and have non-empty text."""
+    def _postprocess_nodes(
+        self, nodes: List[NodeWithScore], query_bundle: Optional[QueryBundle] = None
+    ) -> List[NodeWithScore]:
+        out: List[NodeWithScore] = []
+        for nws in nodes:
+            node = nws.node
+            meta = getattr(node, "metadata", None) or {}
+            if not isinstance(meta, dict):
+                meta = {}
+
+            if not _is_chunk_node(meta):
+                continue
+
+            content = _extract_chunk_text(node, meta)
+            if not content:
+                continue
+
+            # ensure node content is actually the chunk text
+            # (some KG nodes may have empty node text but meta text)
+            if not (node.get_content() or "").strip():
+                # replace with real TextNode content
+                new_node = TextNode(text=content, metadata=meta)
+                if meta.get("chunk_id"):
+                    new_node.id_ = str(meta["chunk_id"])
+                out.append(NodeWithScore(node=new_node, score=float(nws.score or 0.0)))
+            else:
+                out.append(nws)
+
+        return out
 
 
 def ensure_query_engine() -> RetrieverQueryEngine:
@@ -535,16 +621,23 @@ def ensure_query_engine() -> RetrieverQueryEngine:
     )
 
     node_postprocessors = []
+
+    # 1) First: remove non-chunk / empty-text nodes (pre-rerank!)
+    node_postprocessors.append(ChunkOnlyPostprocessor())
+
+    # 2) Then: rerank only real chunk candidates
     if USE_RERANK:
         node_postprocessors.append(
-            SentenceTransformerRerank(top_n=RERANK_TOP_N, model=RERANK_MODEL)
-        )
+        SentenceTransformerRerank(top_n=RERANK_TOP_N, model=RERANK_MODEL)
+    )
+
 
     QUERY_ENGINE = RetrieverQueryEngine.from_args(
         retriever=ensemble,
         node_postprocessors=node_postprocessors,
         llm=llm,
-        prompt_template=QA_PROMPT,
+        text_qa_template=QA_PROMPT,
+        response_mode="compact",
     )
     print("[INFO] QueryEngine ready.")
     return QUERY_ENGINE

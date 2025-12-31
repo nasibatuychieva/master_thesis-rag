@@ -21,7 +21,7 @@ load_dotenv(find_dotenv())
 # ---------------------------------------------------------------------------
 
 embed_model = OpenAIEmbedding(model="text-embedding-3-small")
-llm = OpenAI(model=os.getenv("OPENAI_MODEL"), temperature=0, max_tokens=1200)
+llm = OpenAI(model=os.getenv("OPENAI_MODEL"), temperature=0)
 
 username = os.getenv("NEO4J_USER")
 password =os.getenv("NEO4J_PASSWORD")
@@ -37,7 +37,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "graphrag"
-    / "golden_answers_dataset.jsonl"
+    / "golden_answers_dataset_short3.jsonl"
 )
 
 # ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ def _extract_chunk_text(result_obj: Any) -> str:
         if isinstance(txt, str) and txt.strip():
             return txt.strip()
 
-        # sometimes content is accessible via get_content()
+        
         try:
             node_content = node.get_content(metadata_mode="none")  
             if isinstance(node_content, str) and node_content.strip():
@@ -205,7 +205,7 @@ def _infer_node_type(meta: Dict[str, Any], default: str = "chunk") -> str:
     """
     Provide something meaningful for logger's context_types_json.
     """
-    # common keys depending on how you stored nodes
+
     for k in ("node_type", "label", "labels", "type", "__label__", "entity_type"):
         v = meta.get(k)
         if isinstance(v, str) and v.strip():
@@ -276,8 +276,14 @@ def answer_with_pg_retriever(question: str) -> Tuple[str, List[Dict[str, Any]]]:
         context = "\n".join(context_lines)
 
     prompt = f"""
-You are an expert in Arduino hardware and embedded systems.
-Answer the user question using ONLY the following retrieved KG context.
+    "You are a technical support assistant for Arduino Products.\n"
+    "Use ONLY the provided context. Do not use outside knowledge.\n"
+    "If the context does not contain the answer, say exactly what information is missing.\n"
+    "Answer in complete sentences.\n"
+    "Answer as completely as possible.\n"
+    "Adapt the structure and style of the answer to the type of the question "
+    "(e.g., list items for 'which' questions, explain processes for 'how' questions, "
+    "and compare variants for 'difference' questions).\n\n"
 
 Context:
 {context}

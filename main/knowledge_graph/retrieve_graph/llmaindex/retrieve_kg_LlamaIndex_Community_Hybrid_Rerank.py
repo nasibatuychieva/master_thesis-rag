@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
 from llama_index.core.prompts import PromptTemplate
 from dotenv import load_dotenv, find_dotenv
 from neo4j import GraphDatabase
@@ -55,9 +56,7 @@ AUTH_USER = os.getenv("NEO4J_USER")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "llmakg"
 
-SCRIPT_NAME = "LLmaIndex_Ensembe_Hybrid_KG_Retriever"
-from pathlib import Path
-import os
+SCRIPT_NAME = "LlamaIndex_BM25_Vector_PG_Community_Rerank"
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
 
@@ -66,9 +65,8 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "graphrag"
-    / "golden_answers_dataset.jsonl"
+    / "golden_answers_dataset_short.jsonl"
 )
-
 
 # Chunk schema
 CHUNK_LABEL = "Chunk"
@@ -84,7 +82,18 @@ CHUNK_LOAD_LIMIT = 80_000
 # Retrieval sizes
 BM25_TOP_K = 30
 VECTOR_TOP_K = 30
-PG_TOP_K = 15
+PG_TOP_K = 30
+
+# --- Community retrieval (NEW) ---
+# We query communities via FULLTEXT, then expand to chunks via:
+# (c:__Community__)-[:IN_COMMUNITY]-(e:__Entity__)-[:MENTIONS]-(ch:Chunk)
+COMMUNITY_VEC_INDEX_NAME = os.getenv("COMMUNITY_VEC_INDEX_NAME", "community_vec")
+COMMUNITY_LEVEL = int(os.getenv("COMMUNITY_LEVEL", "1"))
+COMMUNITY_EMB_PROP = "embedding" 
+
+COMMUNITY_TOP_K = 25          # how many communities to keep (after FT)
+COMMUNITY_EXPAND_CHUNK_K = 250 # how many chunk candidates from expansion
+COMMUNITY_CHUNK_TOP_K = 30     # final chunk nodes returned by community retriever
 
 # After merge
 ENSEMBLE_TOP_K = 60         # candidates before rerank
@@ -94,6 +103,7 @@ FINAL_CONTEXT_K = 12        # what to pass to prompt & log
 W_BM25 = 1.0
 W_VECTOR = 1.0
 W_PG = 1.2  # give KG a slight boost
+W_COMM = 0.6  # NEW: start mild
 
 # Rerank (local)
 USE_RERANK = True
@@ -108,17 +118,21 @@ driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
 driver.verify_connectivity()
 
 QA_PROMPT = PromptTemplate(
-    "You are a technical support assistant.\n"
-    "Answer the question using ONLY the provided context.\n"
-    "Write a detailed, structured answer.\n"
-    "- If the question asks for variants, list all variants.\n"
-    "- Include key specs, ranges, and differences.\n"
-    "- Use bullet points and short headings.\n"
-    "If context is insufficient, say what is missing.\n\n"
-    "Context:\n{context_str}\n\n"
-    "Question: {query_str}\n\n"
-    "Answer:"
+    "You are a technical support assistant for Arduino Products.\n"
+    "Use ONLY the provided context. Do not use outside knowledge.\n"
+    "If the context does not contain the answer, say exactly what information is missing.\n"
+    "Answer in complete sentences.\n"
+    "Answer as completely as possible.\n"
+    "Adapt the structure and style of the answer to the type of the question "
+    "(e.g., list items for 'which' questions, explain processes for 'how' questions, "
+    "and compare variants for 'difference' questions).\n\n"
+    "Context:\n"
+    "{context_str}\n\n"
+    "Question:\n"
+    "{query_str}\n\n"
+    "Answer:\n"
 )
+
 
 # ---------------------------------------------------------------------------
 # 2) Logging helper (context-aware)
@@ -132,7 +146,6 @@ def safe_log(
     gold_answer: str,
     context_items: Optional[List[Dict[str, Any]]] = None,
 ):
-    # Einmal versuchen – und wenn es knallt, soll es sichtbar sein.
     log_antwort(
         script,
         question_id,
@@ -175,8 +188,8 @@ def load_chunk_nodes(limit: int) -> List[TextNode]:
             "product": r.get("product", ""),
             "product_category": r.get("product_category", ""),
             "retriever": "chunk_store",
-            "node_type": "Chunk",  # <--- hilfreich fürs Logging
-            "label": CHUNK_LABEL,  # <--- optional
+            "node_type": "Chunk",
+            "label": CHUNK_LABEL,
         }
 
         n = TextNode(text=text, metadata=meta)
@@ -189,7 +202,131 @@ def load_chunk_nodes(limit: int) -> List[TextNode]:
 
 
 # ---------------------------------------------------------------------------
-# 4) Ensemble Retriever (BM25 + Vector + PG)
+# 4) NEW: Community Router Retriever (FT over communities -> expand to chunks)
+# ---------------------------------------------------------------------------
+class CommunityRouterRetriever(BaseRetriever):
+    """
+    Community search path:
+      (c:__Community__)-[:IN_COMMUNITY]-(e:__Entity__)-[:MENTIONS]-(ch:Chunk)
+
+    Strategy:
+      1) fulltext search communities
+      2) keep top communities
+      3) expand to chunks via entity mentions
+      4) return Chunk TextNodes
+    """
+
+    def __init__(
+        self,
+        driver,
+        database: str,
+        *,
+        embed_model: OpenAIEmbedding,
+        community_vec_index: str,
+        community_level: int,
+        top_k_communities: int,
+        expand_chunk_k: int,
+        chunk_top_k: int,
+    ):
+        super().__init__()
+        self.driver = driver
+        self.database = database
+        self.embed_model = embed_model
+        self.community_vec_index = community_vec_index
+        self.community_level = int(community_level)
+        self.top_k_communities = int(top_k_communities)
+        self.expand_chunk_k = int(expand_chunk_k)
+        self.chunk_top_k = int(chunk_top_k)
+
+    def _retrieve(self, query_bundle: QueryBundle) -> List[NodeWithScore]:
+        q = str(query_bundle.query_str or "").strip()
+        if not q:
+            return []
+
+
+        qvec = self.embed_model.get_query_embedding(q)
+        if qvec is None:
+            return []
+        qvec = list(qvec) 
+
+        cy_comm_vec = """
+        CALL db.index.vector.queryNodes($index_name, $k, $qvec)
+        YIELD node, score
+        WHERE node:__Community__
+        AND (node.level IS NULL OR node.level = $level)
+        AND node.embedding IS NOT NULL
+        RETURN elementId(node) AS cid, score
+        ORDER BY score DESC
+        """
+
+        with self.driver.session(database=self.database) as s:
+            comm_rows = s.run(
+        cy_comm_vec,
+        index_name=self.community_vec_index,
+        k=self.top_k_communities,
+        qvec=qvec,
+        level=self.community_level,
+        ).data()
+
+        community_ids = [r["cid"] for r in comm_rows if r.get("cid")]
+        if not community_ids:
+            return []
+
+
+        # Expand via Entities -> Chunks
+        cy_expand = f"""
+        MATCH (c:__Community__)
+        WHERE elementId(c) IN $community_ids
+        MATCH (c)-[:IN_COMMUNITY]-(e:__Entity__)
+        MATCH (e)-[:MENTIONS]-(ch:{CHUNK_LABEL})
+        WHERE ch.{TEXT_PROP} IS NOT NULL AND trim(ch.{TEXT_PROP}) <> ''
+        RETURN
+          ch AS chunk,
+          count(DISTINCT e) AS entity_hits
+        ORDER BY entity_hits DESC
+        LIMIT $k
+        """
+
+        with self.driver.session(database=self.database) as s:
+            ch_rows = s.run(
+                cy_expand,
+                community_ids=community_ids,
+                k=self.expand_chunk_k,
+            ).data()
+
+        # Convert to TextNodes + score by entity_hits
+        out: List[NodeWithScore] = []
+        for r in ch_rows:
+            ch = r.get("chunk")
+            hits = int(r.get("entity_hits") or 0)
+            if ch is None:
+                continue
+
+            text = (ch.get(TEXT_PROP, "") or "").strip()
+            if not text:
+                continue
+
+            chunk_id = str(ch.get(ID_PROP) or ch.get("id") or "").strip()
+            meta = dict(ch)
+            meta["chunk_id"] = chunk_id
+            meta["retriever"] = "community"
+            meta["node_type"] = "Chunk"
+            meta["entity_hits"] = hits
+
+            # Normalize-ish score: keep hits as raw; ensemble weights handles scaling
+            n = TextNode(text=text, metadata=meta)
+            if chunk_id:
+                n.id_ = chunk_id
+
+            out.append(NodeWithScore(node=n, score=float(hits)))
+
+        # keep only top chunk_top_k
+        out.sort(key=lambda x: float(x.score or 0.0), reverse=True)
+        return out[: self.chunk_top_k]
+
+
+# ---------------------------------------------------------------------------
+# 5) Ensemble Retriever (BM25 + Vector + PG + Community)
 # ---------------------------------------------------------------------------
 class EnsembleRetriever(BaseRetriever):
     def __init__(
@@ -197,6 +334,7 @@ class EnsembleRetriever(BaseRetriever):
         bm25_retriever: Optional[BaseRetriever],
         vector_retriever: Optional[BaseRetriever],
         pg_retriever: Optional[BaseRetriever],
+        community_retriever: Optional[BaseRetriever],
         *,
         weights: Dict[str, float],
         top_k: int,
@@ -206,21 +344,19 @@ class EnsembleRetriever(BaseRetriever):
         self.bm25 = bm25_retriever
         self.vector = vector_retriever
         self.pg = pg_retriever
+        self.community = community_retriever
         self.weights = weights
         self.top_k = top_k
         self.debug = debug
 
     def _dedupe_id(self, nws: NodeWithScore) -> str:
         node = nws.node
-        # prefer chunk_id if present
         meta = getattr(node, "metadata", None) or {}
         if isinstance(meta, dict) and meta.get("chunk_id"):
             return str(meta["chunk_id"])
-        # else id_
         nid = getattr(node, "id_", None)
         if nid:
             return str(nid)
-        # else fallback
         txt = (node.get_content() or "")[:200]
         return f"txt:{hash(txt)}"
 
@@ -247,13 +383,15 @@ class EnsembleRetriever(BaseRetriever):
             add_nodes("vector", self.vector.retrieve(query_bundle))
         if self.pg is not None:
             add_nodes("pg", self.pg.retrieve(query_bundle))
+        if self.community is not None:
+            add_nodes("community", self.community.retrieve(query_bundle))
 
         merged.sort(key=lambda x: float(x.score or 0.0), reverse=True)
         return merged[: self.top_k]
 
 
 # ---------------------------------------------------------------------------
-# 5) Build QueryEngine once
+# 6) Build QueryEngine once
 # ---------------------------------------------------------------------------
 QUERY_ENGINE: Optional[RetrieverQueryEngine] = None
 
@@ -299,7 +437,6 @@ def ensure_query_engine() -> RetrieverQueryEngine:
         embed_model=embed_model,
     )
 
-    # KG side
     kg_vector = VectorContextRetriever(
         graph_store=pg_index.property_graph_store,
         embed_model=embed_model,
@@ -314,12 +451,25 @@ def ensure_query_engine() -> RetrieverQueryEngine:
         llm=llm,
     )
 
-    # Ensemble
+    print("[INFO] Building Community router retriever (NEW)...")
+    community_retriever = CommunityRouterRetriever(
+        driver=driver,
+    database=DATABASE,
+    embed_model=embed_model,
+    community_vec_index=COMMUNITY_VEC_INDEX_NAME,
+    community_level=COMMUNITY_LEVEL,
+    top_k_communities=COMMUNITY_TOP_K,
+    expand_chunk_k=COMMUNITY_EXPAND_CHUNK_K,
+    chunk_top_k=COMMUNITY_CHUNK_TOP_K,
+    )
+
+    # Ensemble (now includes community)
     ensemble = EnsembleRetriever(
         bm25_retriever=bm25_retriever,
         vector_retriever=vector_retriever,
         pg_retriever=pg_retriever,
-        weights={"bm25": W_BM25, "vector": W_VECTOR, "pg": W_PG},
+        community_retriever=community_retriever,
+        weights={"bm25": W_BM25, "vector": W_VECTOR, "pg": W_PG, "community": W_COMM},
         top_k=ENSEMBLE_TOP_K,
         debug=False,
     )
@@ -334,26 +484,20 @@ def ensure_query_engine() -> RetrieverQueryEngine:
         retriever=ensemble,
         node_postprocessors=node_postprocessors,
         llm=llm,
-        prompt_template=QA_PROMPT,
+        text_qa_template=QA_PROMPT,
+        response_mode="compact",
     )
     print("[INFO] QueryEngine ready.")
     return QUERY_ENGINE
 
 
 # ---------------------------------------------------------------------------
-# 6) Ask + extract ONLY Chunk-text context_items for logging
+# 7) Ask + extract ONLY Chunk-text context_items for logging
 # ---------------------------------------------------------------------------
 def _is_chunk_node(meta: Dict[str, Any]) -> bool:
-    """
-    Decide whether this source node represents a Chunk.
-    We keep this permissive enough to catch different LlamaIndex/Neo4j metadata shapes,
-    but strict enough to exclude pure Entity/Relation nodes.
-    """
-    # strongest signal: chunk_id present
     if meta.get("chunk_id"):
         return True
 
-    # common metadata keys across versions
     nt = str(meta.get("node_type", "") or "").strip().lower()
     if nt == "chunk":
         return True
@@ -371,9 +515,6 @@ def _is_chunk_node(meta: Dict[str, Any]) -> bool:
 
 
 def _extract_chunk_text(node: Any, meta: Dict[str, Any]) -> str:
-    """
-    Prefer node.get_content(), fallback to meta['text'] if needed.
-    """
     txt = ""
     try:
         txt = (node.get_content() or "").strip()
@@ -389,12 +530,18 @@ def _extract_chunk_text(node: Any, meta: Dict[str, Any]) -> str:
 def ask(question: str) -> Tuple[str, List[Dict[str, Any]]]:
     qe = ensure_query_engine()
     resp = qe.query(question)
-    answer_text = str(resp).strip()
+
+    # IMPORTANT: use resp.response if available (avoid "Empty Response" string fallback issues)
+    answer_text = getattr(resp, "response", None)
+    if isinstance(answer_text, str):
+        answer_text = answer_text.strip()
+    else:
+        answer_text = str(resp).strip()
 
     context_items: List[Dict[str, Any]] = []
     src_nodes = getattr(resp, "source_nodes", None) or []
 
-    # IMPORTANT: log ONLY Chunk node texts
+    # log ONLY Chunk node texts
     for nws in src_nodes:
         node = nws.node
         meta = getattr(node, "metadata", None) or {}
@@ -402,7 +549,6 @@ def ask(question: str) -> Tuple[str, List[Dict[str, Any]]]:
             meta = {}
 
         if not _is_chunk_node(meta):
-            # skip KG-only nodes (Entity/Relation/Community etc.)
             continue
 
         content = _extract_chunk_text(node, meta)
@@ -411,14 +557,15 @@ def ask(question: str) -> Tuple[str, List[Dict[str, Any]]]:
 
         context_items.append(
             {
-                "content": content,  # <- Chunk.text
-                "node_type": "Chunk",  # <- so your logger counts it properly
+                "content": content,
+                "node_type": "Chunk",
                 "source": meta.get("file", meta.get("source", "")),
                 "id": meta.get("chunk_id") or getattr(node, "id_", "") or "",
                 "score": float(getattr(nws, "score", 0.0) or 0.0),
                 "product": meta.get("product", ""),
                 "product_category": meta.get("product_category", ""),
                 "retriever": meta.get("retriever", "ensemble"),
+                "entity_hits": meta.get("entity_hits", None),  # NEW: community expander info if present
             }
         )
 
@@ -429,7 +576,7 @@ def ask(question: str) -> Tuple[str, List[Dict[str, Any]]]:
 
 
 # ---------------------------------------------------------------------------
-# 7) Batch + manual
+# 8) Batch + manual
 # ---------------------------------------------------------------------------
 def run_batch_from_file() -> None:
     print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
@@ -493,8 +640,10 @@ def manual_question() -> None:
 
 
 def main_loop() -> None:
-    print("Ensemble: BM25(Chunk) + Vector(Chunk) + PGRetriever(KG) + Rerank")
+    print("Ensemble: BM25(Chunk) + Vector(Chunk) + PGRetriever(KG) + CommunityRouter + Rerank")
     print("Type 'exit' to quit.\n")
+    print(f"DB={DATABASE}")
+    print(f"Community FT index={COMMUNITY_VEC_INDEX_NAME} level={COMMUNITY_LEVEL}")
     while True:
         mode = input("Manual question? (y/n): ").strip().lower()
         if mode in ("exit", "quit", "q"):
