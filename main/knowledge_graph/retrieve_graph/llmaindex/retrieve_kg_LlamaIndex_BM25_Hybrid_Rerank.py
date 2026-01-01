@@ -65,7 +65,7 @@ QUESTIONS_PATH = (
     PROJECT_ROOT
     / "main"
     / "evaluation"
-    / "graphrag"
+    / "evaluation_datasets"
     / "golden_answers_dataset_short.jsonl"
 )
 
