@@ -35,7 +35,7 @@ QUESTIONS_PATH = (
     / "golden_answers_dataset_short.jsonl"
 )
 
-llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
+llm = ChatOpenAI(model=os.getenv("OPENAI_MODEL"))
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
 vector_index = Neo4jVector(
