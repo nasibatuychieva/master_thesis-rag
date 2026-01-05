@@ -1071,7 +1071,7 @@ def aggregate_summary(results: List[EvaluationResult]) -> Dict[str, Any]:
 # -----------------------------
 def main() -> None:
     PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
-    ANSWERS_PATH = PROJECT_ROOT / "main" / "evaluation" / "results" / "answers_log_new_dataset_8_part3.jsonl"
+    ANSWERS_PATH = PROJECT_ROOT / "main" / "evaluation" / "results" / "answers_log_llmaindex_nonempty.jsonl"
     JSONL_IN = Path(os.getenv("ANSWERS_LOG_PATH", str(ANSWERS_PATH))).expanduser().resolve()
 
     log("Reading input JSONL", path=str(JSONL_IN))
