@@ -27,7 +27,7 @@ AUTH_USER = os.getenv("NEO4J_USER")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "simplekg"
 
-SCRIPT_NAME = "SimpleKG_Hybrid_Retriever_Rerank"
+SCRIPT_NAME = "SimpleKG_Hybrid_Rerank"
 from pathlib import Path
 import os
 
@@ -38,7 +38,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "evaluation_datasets"
-    / "golden_answers_dataset_short.jsonl"
+    / "golden_answers_dataset_filtered.jsonl"
 )
 
 # Neo4j-Driver
@@ -56,27 +56,25 @@ embedder = OpenAIEmbeddings(model="text-embedding-3-small")
 # ---------------------------------------------------------------------------
 # 2) Retrieval query (used by VectorCypherRetriever internally)
 # ---------------------------------------------------------------------------
-
 retrieval_query = """
+WITH node AS node, score
 
-WITH node, score
 
-// 1) Entities direkt am Seed-Chunk (limitiert)
 OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e1:__Entity__)
 WITH node, score, collect(DISTINCT e1)[0..20] AS e1s
 
-// 2) Related chunks: pro Seed nur Top N (nach shared-entity-count)
+// 2) Related chunks: Top N pro Seed nach shared-entity-count
 CALL {
   WITH e1s
   UNWIND e1s AS e
-  MATCH (e)-[:FROM_CHUNK]->(node2:Chunk)
-  WITH node2, count(DISTINCT e) AS evidence
+  MATCH (e)-[:FROM_CHUNK]->(c:Chunk)
+  WITH c, count(DISTINCT e) AS evidence
   ORDER BY evidence DESC
   LIMIT 10
-  RETURN collect(node2) AS top_related_chunks
+  RETURN collect(DISTINCT c) AS related_chunks
 }
 
-// 3) Related entities: ebenfalls limitieren
+// 3) Related entities (für dein Logging-Format)
 CALL {
   WITH e1s
   UNWIND e1s AS e
@@ -84,15 +82,79 @@ CALL {
   RETURN collect(DISTINCT e2)[0..30] AS rel_ents
 }
 
+CALL {
+  WITH e1s
+  UNWIND e1s AS e
+  MATCH p = (e)-[rs*1..1]-(nb)
+  WHERE nb:__Entity__
+    AND ALL(r IN rs WHERE type(r) <> 'FROM_CHUNK')
+    AND ALL(n IN nodes(p) WHERE n:__Entity__)
+  UNWIND relationships(p) AS rel
+  RETURN collect(DISTINCT rel) AS rels
+}
+
+// 5) Ausgabe: kompatibel zu deinem Code + optional "info"
+WITH node, score, e1s, rel_ents, related_chunks, rels,
+     ([node] + related_chunks) AS chunks
+
 RETURN
-  node.text AS text,
+  // node.text AS text,
   score     AS score,
-  [e IN e1s | {name: e.name, labels: labels(e)}] AS direct_entities,
-  [n IN top_related_chunks | n.text] AS related_chunk_texts,
-  [e IN rel_ents | {name: e.name, labels: labels(e)}] AS related_entities
+  [e IN e1s | {name: coalesce(e.name, e.id, ''), labels: labels(e)}] AS direct_entities,
+  [n IN related_chunks | n.text] AS related_chunk_texts,
+  [e IN rel_ents | {name: coalesce(e.name, e.id, ''), labels: labels(e)}] AS related_entities,
 
-
+  // optional: zusätzliches Feld (stört nicht)
+  apoc.text.join([c IN chunks | coalesce(c.text,'')], '\n') +
+  '\n' +
+  apoc.text.join(
+    [r IN rels |
+      coalesce(startNode(r).name, startNode(r).id, '?') + ' - ' +
+      type(r) + ' ' +
+      coalesce(r.details, r.description, '') + ' -> ' +
+      coalesce(endNode(r).name, endNode(r).id, '?')
+    ],
+    '\n'
+  ) AS info
 """
+
+
+# retrieval_query = """
+
+# WITH node, score
+
+# // 1) Entities direkt am Seed-Chunk (limitiert)
+# OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e1:__Entity__)
+# WITH node, score, collect(DISTINCT e1)[0..20] AS e1s
+
+# // 2) Related chunks: pro Seed nur Top N (nach shared-entity-count)
+# CALL {
+#   WITH e1s
+#   UNWIND e1s AS e
+#   MATCH (e)-[:FROM_CHUNK]->(node2:Chunk)
+#   WITH node2, count(DISTINCT e) AS evidence
+#   ORDER BY evidence DESC
+#   LIMIT 10
+#   RETURN collect(node2) AS top_related_chunks
+# }
+
+# // 3) Related entities: ebenfalls limitieren
+# CALL {
+#   WITH e1s
+#   UNWIND e1s AS e
+#   MATCH (e)--(e2:__Entity__)
+#   RETURN collect(DISTINCT e2)[0..30] AS rel_ents
+# }
+
+# RETURN
+#   node.text AS text,
+#   score     AS score,
+#   [e IN e1s | {name: e.name, labels: labels(e)}] AS direct_entities,
+#   [n IN top_related_chunks | n.text] AS related_chunk_texts,
+#   [e IN rel_ents | {name: e.name, labels: labels(e)}] AS related_entities
+
+
+# """
 LUCENE_SPECIAL = r'(\+|\-|\&\&|\|\||\!|\(|\)|\{|\}|\[|\]|\^|"|~|\*|\?|\:|\\|\/)'
 
 def lucene_escape(s: str) -> str:
@@ -148,11 +210,15 @@ class RerankingRetriever(Retriever):
         self.multiplier = multiplier
 
     def _rerank(self, raw_query: str, results: List[Dict[str, Any]], top_k: int):
-        candidates = [r for r in results if isinstance(r, dict) and r.get("text")]
+        candidates = [
+        r for r in results
+        if isinstance(r, dict) and (r.get("info") or r.get("text"))
+        ]
+
         if not candidates:
             return results
 
-        pairs = [[raw_query, r["text"]] for r in candidates]
+        pairs = [[raw_query, r["info"]] for r in candidates]
         scores = self.reranker.predict(pairs)
 
         for r, s in zip(candidates, scores):
@@ -161,7 +227,8 @@ class RerankingRetriever(Retriever):
         candidates.sort(key=lambda r: r["rerank_score"], reverse=True)
         return candidates[:top_k]
     
-    def search(self, query_text: str, top_k: int = 20, **kwargs):
+    #def search(self, query_text: str, top_k: int = 20, **kwargs):
+    def search(self, query_text: str, top_k: int = 3, **kwargs):    
     
         raw_query = kwargs.pop("raw_query", query_text)
 
@@ -186,7 +253,7 @@ class RerankingRetriever(Retriever):
         return base_result
 
 
-    def retrieve(self, query_text: str, top_k: int = 20, **kwargs):
+    def retrieve(self, query_text: str, top_k: int = 3, **kwargs):
         raw_query = kwargs.pop("raw_query", query_text)
         k = max(top_k * self.multiplier, top_k)
 
@@ -230,7 +297,7 @@ def safe_log(
 # 4) Context retrieval (LlamaIndex-style): call retriever directly
 # ---------------------------------------------------------------------------
 
-def retrieve_context_items(question: str, top_k: int = 20) -> List[Dict[str, Any]]:
+def retrieve_context_items(question: str, top_k: int = 3) -> List[Dict[str, Any]]:
     """
     Retrieve context directly from VectorCypherRetriever (not from GraphRAG response).
     This is the reliable way to always have context for faithfulness evaluation.
@@ -257,7 +324,7 @@ def retrieve_context_items(question: str, top_k: int = 20) -> List[Dict[str, Any
     if isinstance(results, list):
         for r in results:
             if isinstance(r, dict):
-                text = str(r.get("text") or "").strip()
+                text = str(r.get("info") or r.get("text") or "").strip()
                 if not text:
                     continue
 
@@ -318,7 +385,7 @@ def retrieve_context_items(question: str, top_k: int = 20) -> List[Dict[str, Any
 # 5) Answering: GraphRAG answer + Retriever context for logging
 # ---------------------------------------------------------------------------
 
-def answer_with_graphrag(question: str, top_k: int = 20) -> Tuple[str, List[Dict[str, Any]]]:
+def answer_with_graphrag(question: str, top_k: int = 3) -> Tuple[str, List[Dict[str, Any]]]:
     """
     Returns (answer, context_items).
     Answer from GraphRAG; context from retriever directly (reliable).
@@ -349,7 +416,7 @@ def answer_with_graphrag(question: str, top_k: int = 20) -> Tuple[str, List[Dict
 # 6) Batch mode (JSONL)
 # ---------------------------------------------------------------------------
 
-def run_batch_from_file(top_k: int = 20):
+def run_batch_from_file(top_k: int = 3):
     print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
 
     if not QUESTIONS_PATH.exists():
@@ -398,7 +465,7 @@ def run_batch_from_file(top_k: int = 20):
 # 7) Manual mode
 # ---------------------------------------------------------------------------
 
-def manual_question(top_k: int = 20):
+def manual_question(top_k: int = 3):
     qid = input("Question ID (optional): ").strip() or ""
     qtype = input("Query type (optional, e.g., factual/relational/summary): ").strip() or "manual"
     question = input("Question: ").strip()
@@ -427,7 +494,7 @@ def manual_question(top_k: int = 20):
 # 8) Main loop
 # ---------------------------------------------------------------------------
 
-def main_loop(top_k: int = 20):
+def main_loop(top_k: int = 3):
     print("SimpleKG Pipeline (GraphRAG answer + Retriever context logging)")
     print("Type 'exit' to quit.\n")
 

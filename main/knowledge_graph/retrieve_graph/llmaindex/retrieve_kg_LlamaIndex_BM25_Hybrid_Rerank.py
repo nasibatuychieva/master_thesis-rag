@@ -66,7 +66,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "evaluation_datasets"
-    / "golden_answers_dataset_short.jsonl"
+    / "golden_answers_dataset_questions_missing.jsonl"
 )
 
 # Chunk schema
@@ -266,19 +266,17 @@ def ensure_query_engine() -> RetrieverQueryEngine:
 
     if BM25Retriever is None:
         raise ImportError(
-            "BM25Retriever konnte nicht importiert werden.\n"
-            "Versuche:\n"
-            "  pip install -U llama-index llama-index-retrievers-bm25\n"
+            "BM25Retriever konnte nicht import werd.\n"
+            
         )
 
     if USE_RERANK and SentenceTransformerRerank is None:
         raise ImportError(
             "SentenceTransformerRerank fehlt.\n"
-            "Installiere:\n"
-            "  pip install -U sentence-transformers\n"
+          
         )
 
-    print("[INFO] Building BM25+Vector indexes from Chunk nodes...")
+    print("[INFO] Building BM25+Vector indexes")
     chunk_nodes = load_chunk_nodes(CHUNK_LOAD_LIMIT)
 
     # Dense index over chunks

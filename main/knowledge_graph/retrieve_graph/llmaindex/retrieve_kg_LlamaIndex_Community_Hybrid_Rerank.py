@@ -56,7 +56,7 @@ AUTH_USER = os.getenv("NEO4J_USER")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "llmakg"
 
-SCRIPT_NAME = "LlamaIndex_BM25_Vector_PG_Community_Rerank"
+SCRIPT_NAME = "LlamaIndex_Community"
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
 
@@ -65,7 +65,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "evaluation_datasets"
-    / "golden_answers_dataset_short_empty_responses2.jsonl"
+    / "golden_answers_dataset_llmaindex_missing.jsonl"
 )
 
 # Chunk schema
@@ -80,9 +80,9 @@ PRODCAT_PROP = "product_category"
 CHUNK_LOAD_LIMIT = 80_000
 
 # Retrieval sizes
-BM25_TOP_K = 30
-VECTOR_TOP_K = 30
-PG_TOP_K = 30
+BM25_TOP_K = 5
+VECTOR_TOP_K = 5
+PG_TOP_K = 5
 
 # --- Community retrieval (NEW) ---
 # We query communities via FULLTEXT, then expand to chunks via:
@@ -91,13 +91,13 @@ COMMUNITY_VEC_INDEX_NAME = os.getenv("COMMUNITY_VEC_INDEX_NAME", "community_vec"
 COMMUNITY_LEVEL = int(os.getenv("COMMUNITY_LEVEL", "1"))
 COMMUNITY_EMB_PROP = "embedding" 
 
-COMMUNITY_TOP_K = 25          # how many communities to keep (after FT)
-COMMUNITY_EXPAND_CHUNK_K = 250 # how many chunk candidates from expansion
-COMMUNITY_CHUNK_TOP_K = 30     # final chunk nodes returned by community retriever
+COMMUNITY_TOP_K = 5       # how many communities to keep (after FT)
+COMMUNITY_EXPAND_CHUNK_K = 5 # how many chunk candidates from expansion
+COMMUNITY_CHUNK_TOP_K = 5     # final chunk nodes returned by community retriever
 
 # After merge
-ENSEMBLE_TOP_K = 60         # candidates before rerank
-FINAL_CONTEXT_K = 12        # what to pass to prompt & log
+ENSEMBLE_TOP_K = 10         # candidates before rerank
+FINAL_CONTEXT_K = 5       # what to pass to prompt & log
 
 # Weights (optional)
 W_BM25 = 1.0
