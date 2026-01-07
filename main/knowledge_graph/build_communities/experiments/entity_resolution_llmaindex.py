@@ -45,17 +45,6 @@ embedding_provider = OpenAIEmbeddings(
 )
 EMBED_DIM = 1536
 
-# Alle __Entity__-Knoten mit Embeddings ausstatten (Property: embedding)
-# Falls bereits Embeddings vorhanden sind, werden sie überschrieben.
-# vector = Neo4jVector.from_existing_graph(
-#     embedding=embedding_provider,
-#     graph=graph,
-#     node_label="__Entity__",          # Dein Entity-Label
-#     text_node_properties=["id"],      # Textbasis für Embedding
-#     embedding_node_property="embedding"
-# )
-
-# print("Embeddings für __Entity__ geschrieben.")
 
 from graphdatascience import GraphDataScience
 
@@ -123,7 +112,7 @@ for row in potential_duplicate_candidates:
     print("Candidate group:", row["combinedResult"])
     
 system_prompt = """You are a data processing assistant. Your task is to identify duplicate entities in a list and decide which of them should be merged.
-The entities might be slightly different in format or content, but essentially refer to the same thing. Use your analytical skills to determine duplicates.
+The entities might be slightly different in format or content, but essentially refer to the same thing. Use  analytical skills to determine duplicates.
 
 Here are the rules for identifying duplicates:
 1. Entities with minor typographical differences should be considered duplicates.

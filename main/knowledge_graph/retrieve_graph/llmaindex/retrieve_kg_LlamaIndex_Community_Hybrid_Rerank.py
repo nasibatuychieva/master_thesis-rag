@@ -15,7 +15,7 @@ from llama_index.core.schema import TextNode, QueryBundle, NodeWithScore
 from llama_index.core.retrievers import BaseRetriever, VectorIndexRetriever
 from llama_index.core.query_engine import RetrieverQueryEngine
 
-# BM25 import differs by version -> safe import
+
 BM25Retriever = None
 try:
     from llama_index.core.retrievers import BM25Retriever  # type: ignore
@@ -100,7 +100,7 @@ COMMUNITY_CHUNK_TOP_K = 5     # final chunk nodes returned by community retrieve
 ENSEMBLE_TOP_K = 10         # candidates before rerank
 FINAL_CONTEXT_K = 5       # what to pass to prompt & log
 
-# Weights (optional)
+# Weights 
 W_BM25 = 1.0
 W_VECTOR = 1.0
 W_PG = 1.2  # give KG a slight boost
@@ -314,7 +314,7 @@ class CommunityRouterRetriever(BaseRetriever):
             meta["node_type"] = "Chunk"
             meta["entity_hits"] = hits
 
-            # Normalize-ish score: keep hits as raw; ensemble weights handles scaling
+
             n = TextNode(text=text, metadata=meta)
             if chunk_id:
                 n.id_ = chunk_id
@@ -532,7 +532,7 @@ def ask(question: str) -> Tuple[str, List[Dict[str, Any]]]:
     qe = ensure_query_engine()
     resp = qe.query(question)
 
-    # IMPORTANT: use resp.response if available (avoid "Empty Response" string fallback issues)
+
     answer_text = getattr(resp, "response", None)
     if isinstance(answer_text, str):
         answer_text = answer_text.strip()

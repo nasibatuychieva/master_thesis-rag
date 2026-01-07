@@ -102,8 +102,7 @@ def build_embedding_text(labels: List[str], props: Dict[str, Any]) -> str:
 
 def main():
   
-    # if not api_key:
-    #     raise RuntimeError("OPENAI_API_KEY is not set in your environment.")
+ 
 
     client = OpenAI()
 

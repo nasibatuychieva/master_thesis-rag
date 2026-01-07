@@ -155,7 +155,7 @@ def iterate_product_docs(
     # load tokenizer
 
     for pdf_path in doc_root.rglob("*.pdf"):
-        # ensure pdf_path is a file
+        
         if not pdf_path.is_file():
             continue
 

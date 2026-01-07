@@ -38,7 +38,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "evaluation_datasets"
-    / "golden_answers_dataset_filtered_summary.jsonl"
+    / "golden_answers_dataset_filtered_factual.jsonl"
 )
 
 # Neo4j-Driver
@@ -119,42 +119,6 @@ RETURN
 """
 
 
-# retrieval_query = """
-
-# WITH node, score
-
-# // 1) Entities direkt am Seed-Chunk (limitiert)
-# OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e1:__Entity__)
-# WITH node, score, collect(DISTINCT e1)[0..20] AS e1s
-
-# // 2) Related chunks: pro Seed nur Top N (nach shared-entity-count)
-# CALL {
-#   WITH e1s
-#   UNWIND e1s AS e
-#   MATCH (e)-[:FROM_CHUNK]->(node2:Chunk)
-#   WITH node2, count(DISTINCT e) AS evidence
-#   ORDER BY evidence DESC
-#   LIMIT 10
-#   RETURN collect(node2) AS top_related_chunks
-# }
-
-# // 3) Related entities: ebenfalls limitieren
-# CALL {
-#   WITH e1s
-#   UNWIND e1s AS e
-#   MATCH (e)--(e2:__Entity__)
-#   RETURN collect(DISTINCT e2)[0..30] AS rel_ents
-# }
-
-# RETURN
-#   node.text AS text,
-#   score     AS score,
-#   [e IN e1s | {name: e.name, labels: labels(e)}] AS direct_entities,
-#   [n IN top_related_chunks | n.text] AS related_chunk_texts,
-#   [e IN rel_ents | {name: e.name, labels: labels(e)}] AS related_entities
-
-
-# """
 LUCENE_SPECIAL = r'(\+|\-|\&\&|\|\||\!|\(|\)|\{|\}|\[|\]|\^|"|~|\*|\?|\:|\\|\/)'
 
 def lucene_escape(s: str) -> str:

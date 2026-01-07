@@ -160,12 +160,12 @@ def answer_global(
     total_batches = (len(rows) + batch_size - 1) // batch_size
     print(f"[INFO] Communities loaded: {len(rows)} | batch_size={batch_size} | batches={total_batches}")
 
-    # Process ALL batches (no dropping)
+    # Process ALL batches 
     for b in range(START_BATCH, total_batches):
         i = b * batch_size
         batch_rows = rows[i:i + batch_size]
 
-        # Per-community truncation (prevents single huge community from blowing up tokens)
+        # Per-community truncation
         texts = []
         for br in batch_rows:
             txt = br.get("txt", "") or ""
@@ -185,8 +185,7 @@ def answer_global(
         if partial:
             partials.append(partial)
 
-        # log contexts used in this batch (full original, NOT truncated, if you want keep as-is)
-        # If your logger grows too much, switch content to the truncated version above.
+
         all_context_items.extend(build_context_items(batch_rows, level=level))
 
     # Final synthesis

@@ -347,7 +347,7 @@ class TwoStageRerankingRetriever(Retriever):
         if not candidates:
             return items[:keep_k] if isinstance(items, list) else items
 
-        # IMPORTANT: rerank on clipped text
+    
         pairs = [
             [raw_query, _clip_text(str(r.get("context_text") or r.get("text") or ""), MAX_CHARS_STAGE1)]
             for r in candidates
@@ -389,7 +389,7 @@ class TwoStageRerankingRetriever(Retriever):
             cid = str(r.get("chunk_id") or "").strip()
             if cid and cid in full_ctx:
                 r["context_text"] = full_ctx[cid]
-            # final safety clip (should rarely trigger if your graph isn't enormous)
+           
             r["context_text"] = _clip_text(str(r.get("context_text") or ""), MAX_CHARS_STAGE2)
 
         return winners

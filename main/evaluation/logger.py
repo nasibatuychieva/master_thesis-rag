@@ -40,7 +40,7 @@ PROJECT_ROOT = _guess_project_root()
 
 # Default output: JSONL file (append)
 DEFAULT_LOGFILE = (
-    PROJECT_ROOT / "main" / "evaluation" / "results" / "new" / "answers_log_new_llmgraph_reranker.jsonl"
+    PROJECT_ROOT / "main" / "evaluation" / "results" / "new" / "to_do_answers_log_new_factual.jsonl"
 )
 
 # allow override
@@ -97,7 +97,7 @@ def _normalize_context_items(context_items: Optional[List[Dict[str, Any]]]) -> L
         # enforce normalized key
         safe["content"] = content
 
-        # ensure node_type exists (helps your type counting)
+       
         if "node_type" not in safe:
             # fall back to "type" if present
             safe["node_type"] = str(safe.get("type") or "unknown")

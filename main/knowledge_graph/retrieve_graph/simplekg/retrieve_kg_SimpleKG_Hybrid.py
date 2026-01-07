@@ -36,7 +36,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "evaluation_datasets"
-    / "golden_answers_dataset_filtered.jsonl"
+    / "golden_answers_dataset_filtered_factual.jsonl"
 )
 
 # Neo4j-Driver
@@ -182,69 +182,7 @@ RETURN
   ) AS context_text
 
 """
-# retrieval_query = """
-# WITH node AS node, score
 
-# // 1) Entities direkt am Seed-Chunk (limitiert)
-# OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e1:__Entity__)
-# WITH node, score, collect(DISTINCT e1)[0..20] AS e1s
-
-# // 2) Related chunks: Top N pro Seed nach shared-entity-count
-# CALL {
-#   WITH e1s
-#   UNWIND e1s AS e
-#   MATCH (e)-[:FROM_CHUNK]->(c:Chunk)
-#   WITH c, count(DISTINCT e) AS evidence
-#   ORDER BY evidence DESC
-#   LIMIT 10
-#   RETURN collect(DISTINCT c) AS related_chunks
-# }
-
-
-# CALL {
-#   WITH e1s
-#   UNWIND e1s AS e
-#   MATCH (e)--(e2:__Entity__)
-#   RETURN collect(DISTINCT e2)[0..30] AS rel_ents
-# }
-
-# // 4) Beziehungen um die direkten Entities (1..2 Hops),
-# //    aber OHNE :FROM_CHUNK und OHNE Chunk-Knoten im Pfad
-# CALL {
-#   WITH e1s
-#   UNWIND e1s AS e
-#   MATCH p = (e)-[rs*1..2]-(nb)
-#   WHERE nb:__Entity__
-#     AND ALL(r IN rs WHERE type(r) <> 'FROM_CHUNK')
-#     AND ALL(n IN nodes(p) WHERE n:__Entity__)
-#   UNWIND relationships(p) AS rel
-#   RETURN collect(DISTINCT rel) AS rels
-# }
-
-# WITH node, score, e1s, rel_ents, related_chunks, rels,
-#      ([node] + related_chunks) AS chunks
-
-# RETURN
-#   // node.text AS text,
-#   score     AS score,
-#   [e IN e1s | {name: coalesce(e.name, e.id, ''), labels: labels(e)}] AS direct_entities,
-#   [n IN related_chunks | n.text] AS related_chunk_texts,
-#   [e IN rel_ents | {name: coalesce(e.name, e.id, ''), labels: labels(e)}] AS related_entities,
-
-#   // optional: zusätzliches Feld (stört nicht)
-#   apoc.text.join([c IN chunks | coalesce(c.text,'')], '\n') +
-#   '\n' +
-#   apoc.text.join(
-#     [r IN rels |
-#       coalesce(startNode(r).name, startNode(r).id, '?') + ' - ' +
-#       type(r) + ' ' +
-#       coalesce(r.details, r.description, '') + ' -> ' +
-#       coalesce(endNode(r).name, endNode(r).id, '?')
-#     ],
-#     '\n'
-#   ) AS context_text
-
-# """
 
 LUCENE_SPECIAL = r'(\+|\-|\&\&|\|\||\!|\(|\)|\{|\}|\[|\]|\^|"|~|\*|\?|\:|\\|\/)'
 

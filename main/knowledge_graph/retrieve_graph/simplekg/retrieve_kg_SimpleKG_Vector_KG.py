@@ -37,7 +37,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "evaluation_datasets"
-    / "golden_answers_dataset_questions_missing.jsonl"
+    / "golden_answers_dataset_filtered_factual.jsonl"
 )
 
 
@@ -210,7 +210,7 @@ def retrieve_context_items(question: str, top_k: int = 3) -> List[Dict[str, Any]
     if isinstance(results, list):
         for r in results:
             if isinstance(r, dict):
-                # ✅ ONLY chunk text
+             
                 text = str(r.get("context_text") or r.get("text") or "").strip()
                 if not text:
                     continue

@@ -622,10 +622,10 @@ def ensure_query_engine() -> RetrieverQueryEngine:
 
     node_postprocessors = []
 
-    # 1) First: remove non-chunk / empty-text nodes (pre-rerank!)
+ 
     node_postprocessors.append(ChunkOnlyPostprocessor())
 
-    # 2) Then: rerank only real chunk candidates
+ 
     if USE_RERANK:
         node_postprocessors.append(
         SentenceTransformerRerank(top_n=RERANK_TOP_N, model=RERANK_MODEL)
@@ -660,10 +660,10 @@ def ask(question: str) -> Tuple[str, List[Dict[str, Any]]]:
         if not isinstance(meta, dict):
             meta = {}
 
-        # --- ROBUST: always log chunk text as "content" ---
+   
         content = (node.get_content() or "").strip()
         if not content:
-            # fallback: sometimes metadata carries the actual chunk text
+          
             content = str(meta.get(TEXT_PROP, "") or "").strip()
         if not content:
             continue

@@ -28,7 +28,7 @@ password = os.getenv("NEO4J_PASSWORD")
 uri = os.getenv("NEO4J_URI")
 database = "llmakg"
 
-SCRIPT_NAME = "LlamaIndex_Dense_GraphRAG_Traversal"
+SCRIPT_NAME = "LlamaIndex_Dense_KG "
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
 QUESTIONS_PATH = (
@@ -36,7 +36,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "evaluation_datasets"
-    / "golden_answers_dataset_filtered.jsonl"
+    / "golden_answers_dataset_filtered_factual.jsonl"
 )
 
 # ---------------------------------------------------------------------------
@@ -244,7 +244,7 @@ def build_graphrag_context_for_seed(chunk_id: str) -> Tuple[str, Dict[str, Any]]
     related_chunk_texts = [t for t in (rec.get("related_chunk_texts") or []) if t and t.strip()]
     rendered_relations = [r for r in (rec.get("rendered_relations") or []) if r and str(r).strip()]
 
-    # Construct a single context string (similar to your Neo4j GraphRAG "info")
+
     parts: List[str] = []
     if seed_text:
         parts.append(seed_text)

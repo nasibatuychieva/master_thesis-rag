@@ -66,7 +66,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "evaluation_datasets"
-    / "golden_answers_dataset_filtered.jsonl"
+    / "golden_answers_dataset_filtered_factual.jsonl"
 )
 
 # Chunk schema
@@ -136,7 +136,7 @@ def safe_log(
     gold_answer: str,
     context_items: Optional[List[Dict[str, Any]]] = None,
 ):
-    # Einmal versuchen – und wenn es knallt, soll es sichtbar sein.
+
     log_antwort(
         script,
         question_id,
@@ -341,10 +341,7 @@ def ensure_query_engine() -> RetrieverQueryEngine:
     )
     print("[INFO] QueryEngine ready.")
         
-    # prompts = QUERY_ENGINE.get_prompts()
-    # for name, p in prompts.items():
-    #     print(f"\n--- PROMPT: {name} ---\n")
-    #     print(p.get_template())
+
 
     return QUERY_ENGINE
 
@@ -421,7 +418,7 @@ def ask(question: str) -> Tuple[str, List[Dict[str, Any]]]:
         context_items.append(
             {
                 "content": content,  # <- Chunk.text
-                "node_type": "Chunk",  # <- so your logger counts it properly
+                "node_type": "Chunk",  
                 "source": meta.get("file", meta.get("source", "")),
                 "id": meta.get("chunk_id") or getattr(node, "id_", "") or "",
                 "score": float(getattr(nws, "score", 0.0) or 0.0),

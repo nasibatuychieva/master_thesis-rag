@@ -126,7 +126,7 @@ def summarize_with_llm(full_content: str) -> Dict[str, Any]:
 
     content = resp.choices[0].message.content or "{}"
 
-    # Should already be JSON because of response_format, but still safe:
+
     try:
         obj = json.loads(content)
         if "summary" not in obj:

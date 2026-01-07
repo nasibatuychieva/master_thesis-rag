@@ -37,7 +37,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "evaluation_datasets"
-    / "golden_answers_dataset_filtered.jsonl"
+    / "golden_answers_dataset_filtered_factual.jsonl"
 )
 
 # ---------------------------------------------------------------------------

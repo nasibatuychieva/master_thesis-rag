@@ -32,14 +32,14 @@ QUESTIONS_PATH = (
 MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 LEVEL = int(os.getenv("COMMUNITY_LEVEL", "1"))
 
-# IMPORTANT: batch = nur Portionierung, NICHT droppen
+
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "8"))
 
-# Hard limits, um Token-Explosion zu verhindern, ohne Communities wegzulassen
+
 MAX_CHARS_PER_COMMUNITY = int(os.getenv("MAX_CHARS_PER_COMMUNITY", "6000"))
 MAX_CHARS_PER_BATCH = int(os.getenv("MAX_CHARS_PER_BATCH", "60000"))
 
-# optional resume (falls es mitten drin crasht)
+
 START_BATCH = int(os.getenv("START_BATCH", "0"))
 
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
@@ -184,8 +184,7 @@ def answer_global(
         if partial:
             partials.append(partial)
 
-        # log contexts used in this batch (full original, NOT truncated, if you want keep as-is)
-        # If your logger grows too much, switch content to the truncated version above.
+
         all_context_items.extend(build_context_items(batch_rows, level=level))
 
     # Final synthesis

@@ -25,11 +25,11 @@ DATABASE = "llmakg"
 
 SCRIPT_NAME = "Community_Vector_Retriever_HyDE"
 
-# IMPORTANT: must match your Neo4j index embedding dimension (you saw 1536)
+
 TEXT_EMBEDDING_MODEL = os.getenv("TEXT_EMBEDDING_MODEL", "text-embedding-3-small")
 
 # LLM for HyDE + answering
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")  # adjust if you want
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")  
 
 # Neo4j vector index name for communities
 COMMUNITY_VEC_INDEX = os.getenv("COMMUNITY_VEC_INDEX", "community_vec")
@@ -168,7 +168,7 @@ def community_vector_retrieve(
 ) -> List[Dict[str, Any]]:
     """
     Returns rows: communityId, score, community_text, entities[], chunks[]
-    Uses your schema:
+
       (c:__Community__)-[:IN_COMMUNITY]-(e:__Entity__)-[:MENTIONS]-(ch:Chunk)
     """
     cypher = """

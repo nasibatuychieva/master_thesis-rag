@@ -582,7 +582,7 @@ def filter_context_by_anchors(norm_ctx: List[Dict[str, str]], anchors: List[str]
         if any(k in txt for k in a):
             hits.append(d)
 
-    # If nothing matched, fallback to original (don’t accidentally wipe context)
+
     if not hits:
         return norm_ctx
 

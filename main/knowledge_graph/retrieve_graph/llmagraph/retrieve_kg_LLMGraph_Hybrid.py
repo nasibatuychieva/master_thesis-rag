@@ -207,7 +207,7 @@ def _call_retriever(question: str, top_k: int):
 def retrieve_context_items(question: str, top_k: int) -> List[Dict[str, Any]]:
     """
     Ensures the logged context is the CHUNK TEXT (node.text) and sets node_type='Chunk'
-    so your logger's context_types_json is meaningful.
+   
     """
     results = _call_retriever(question, top_k=top_k)
 

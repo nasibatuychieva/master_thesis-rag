@@ -123,7 +123,7 @@ def _build_fulltext_query(pre: Dict[str, Any]) -> str:
 
 def retrieve_chunks_sparse(pre: Dict[str, Any], k: int = 12) -> List[Document]:
     """
-    Returns List[Document] so the rest of your pipeline stays unchanged.
+
     Pulls node properties into Document.metadata.
     """
     query_str = _build_fulltext_query(pre)
