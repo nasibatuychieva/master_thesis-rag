@@ -55,40 +55,47 @@ embedder = OpenAIEmbeddings(model="text-embedding-3-small")
 # 2) Retrieval query (used by VectorCypherRetriever internally)
 # ---------------------------------------------------------------------------
 retrieval_query = """
-WITH node AS node, score
+WITH node, score
+WHERE node:Chunk
+  AND node.text IS NOT NULL
+  AND trim(node.text) <> ""
 
-// 1) Entities direkt am Seed-Chunk (limitiert)
-OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e1:__Entity__)
+// 1) Direct entities am Seed-Chunk
+OPTIONAL MATCH (node)-[:MENTIONS]-(e1:Entity)
 WITH node, score, collect(DISTINCT e1)[0..20] AS e1s
 
-// 2) Related chunks: Top N pro Seed nach shared-entity-count
+// 2) Related chunks: Top N via shared entities
 CALL {
-  WITH e1s
+  WITH node, e1s
   UNWIND e1s AS e
-  MATCH (e)-[:FROM_CHUNK]->(c:Chunk)
+  MATCH (e)-[:MENTIONS]-(c:Chunk)
+  WHERE c <> node
+    AND c.text IS NOT NULL
+    AND trim(c.text) <> ""
   WITH c, count(DISTINCT e) AS evidence
   ORDER BY evidence DESC
   LIMIT 10
   RETURN collect(DISTINCT c) AS related_chunks
 }
 
-
+// 3) Related entities (Neighbors der direkten Entities)
 CALL {
   WITH e1s
   UNWIND e1s AS e
-  MATCH (e)--(e2:__Entity__)
+  MATCH (e)--(e2:Entity)
+  WHERE e2 <> e
   RETURN collect(DISTINCT e2)[0..30] AS rel_ents
 }
 
-// 4) Beziehungen um die direkten Entities (1..2 Hops),
-//    aber OHNE :FROM_CHUNK und OHNE Chunk-Knoten im Pfad
+// 4) Entity–Entity Beziehungen um direkte Entities (1..2 Hops),
+//    OHNE :MENTIONS und OHNE Chunk-Knoten im Pfad
 CALL {
   WITH e1s
   UNWIND e1s AS e
   MATCH p = (e)-[rs*1..2]-(nb)
-  WHERE nb:__Entity__
-    AND ALL(r IN rs WHERE type(r) <> 'FROM_CHUNK')
-    AND ALL(n IN nodes(p) WHERE n:__Entity__)
+  WHERE nb:Entity
+    AND ALL(r IN rs WHERE type(r) <> 'MENTIONS')
+    AND ALL(n IN nodes(p) WHERE n:Entity)
   UNWIND relationships(p) AS rel
   RETURN collect(DISTINCT rel) AS rels
 }
@@ -96,27 +103,148 @@ CALL {
 WITH node, score, e1s, rel_ents, related_chunks, rels,
      ([node] + related_chunks) AS chunks
 
-RETURN
-  // node.text AS text,
-  score     AS score,
-  [e IN e1s | {name: coalesce(e.name, e.id, ''), labels: labels(e)}] AS direct_entities,
-  [n IN related_chunks | n.text] AS related_chunk_texts,
-  [e IN rel_ents | {name: coalesce(e.name, e.id, ''), labels: labels(e)}] AS related_entities,
+// -------- Chunk-Text (ohne APOC) --------
+WITH node, score, e1s, rel_ents, related_chunks, rels, chunks,
+     reduce(txt = "", c IN chunks |
+       txt + CASE WHEN txt = "" THEN "" ELSE "\n" END + coalesce(c.text, "")
+     ) AS chunk_text
 
-  // optional: zusätzliches Feld (stört nicht)
-  apoc.text.join([c IN chunks | coalesce(c.text,'')], '\n') +
-  '\n' +
-  apoc.text.join(
-    [r IN rels |
-      coalesce(startNode(r).name, startNode(r).id, '?') + ' - ' +
-      type(r) + ' ' +
-      coalesce(r.details, r.description, '') + ' -> ' +
-      coalesce(endNode(r).name, endNode(r).id, '?')
-    ],
-    '\n'
+// -------- Entity-Text (direct + related) --------
+WITH node, score, e1s, rel_ents, related_chunks, rels, chunk_text,
+     // Direct entities als Textzeilen
+     reduce(et = "", e IN e1s |
+       et + CASE WHEN et = "" THEN "" ELSE "\n" END +
+       ("- " + coalesce(e.id, e.description, elementId(e), "?")
+        + " [" + coalesce(e.entityType, "") + "]")
+     ) AS direct_ent_text,
+     // Related entities als Textzeilen
+     reduce(rt = "", e IN rel_ents |
+       rt + CASE WHEN rt = "" THEN "" ELSE "\n" END +
+       ("- " + coalesce(e.id, e.description, elementId(e), "?")
+        + " [" + coalesce(e.entityType, "") + "]")
+     ) AS related_ent_text
+
+// -------- Relation-Text robust (LIST<STRING> -> String) --------
+WITH node, score, e1s, rel_ents, related_chunks, chunk_text, direct_ent_text, related_ent_text,
+     [r IN rels |
+       coalesce(startNode(r).id, startNode(r).description, elementId(startNode(r)), "?")
+       + " - " + type(r) + " " +
+       CASE
+         WHEN r.details IS NULL AND r.description IS NULL THEN ""
+         WHEN r.details IS NOT NULL THEN
+           CASE
+             WHEN valueType(r.details) STARTS WITH "LIST" THEN
+               reduce(s = "", x IN r.details |
+                 s + CASE WHEN s = "" THEN "" ELSE "; " END + toString(x)
+               )
+             ELSE toString(r.details)
+           END
+         ELSE
+           CASE
+             WHEN valueType(r.description) STARTS WITH "LIST" THEN
+               reduce(s = "", x IN r.description |
+                 s + CASE WHEN s = "" THEN "" ELSE "; " END + toString(x)
+               )
+             ELSE toString(r.description)
+           END
+       END
+       + " -> " +
+       coalesce(endNode(r).id, endNode(r).description, elementId(endNode(r)), "?")
+     ] AS rel_lines
+
+WITH node, score, e1s, rel_ents, related_chunks,
+     chunk_text, direct_ent_text, related_ent_text,
+     reduce(reltext = "", line IN rel_lines |
+       reltext + CASE WHEN reltext = "" THEN "" ELSE "\n" END + line
+     ) AS rel_text
+
+// -------- Final Output --------
+RETURN
+  score AS score,
+
+  [e IN e1s |
+    { id: coalesce(e.id, e.description, elementId(e)),
+      entityType: coalesce(e.entityType, "") }
+  ] AS direct_entities,
+
+  [c IN related_chunks | c.text][0..10] AS related_chunk_texts,
+
+  [e IN rel_ents |
+    { id: coalesce(e.id, e.description, elementId(e)),
+      entityType: coalesce(e.entityType, "") }
+  ] AS related_entities,
+
+  (
+    "=== CHUNKS ===\n" + chunk_text
+    + "\n\n=== DIRECT ENTITIES ===\n" + coalesce(direct_ent_text, "")
+    + "\n\n=== RELATED ENTITIES ===\n" + coalesce(related_ent_text, "")
+    + "\n\n=== RELATIONS ===\n" + coalesce(rel_text, "")
   ) AS context_text
 
 """
+# retrieval_query = """
+# WITH node AS node, score
+
+# // 1) Entities direkt am Seed-Chunk (limitiert)
+# OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e1:__Entity__)
+# WITH node, score, collect(DISTINCT e1)[0..20] AS e1s
+
+# // 2) Related chunks: Top N pro Seed nach shared-entity-count
+# CALL {
+#   WITH e1s
+#   UNWIND e1s AS e
+#   MATCH (e)-[:FROM_CHUNK]->(c:Chunk)
+#   WITH c, count(DISTINCT e) AS evidence
+#   ORDER BY evidence DESC
+#   LIMIT 10
+#   RETURN collect(DISTINCT c) AS related_chunks
+# }
+
+
+# CALL {
+#   WITH e1s
+#   UNWIND e1s AS e
+#   MATCH (e)--(e2:__Entity__)
+#   RETURN collect(DISTINCT e2)[0..30] AS rel_ents
+# }
+
+# // 4) Beziehungen um die direkten Entities (1..2 Hops),
+# //    aber OHNE :FROM_CHUNK und OHNE Chunk-Knoten im Pfad
+# CALL {
+#   WITH e1s
+#   UNWIND e1s AS e
+#   MATCH p = (e)-[rs*1..2]-(nb)
+#   WHERE nb:__Entity__
+#     AND ALL(r IN rs WHERE type(r) <> 'FROM_CHUNK')
+#     AND ALL(n IN nodes(p) WHERE n:__Entity__)
+#   UNWIND relationships(p) AS rel
+#   RETURN collect(DISTINCT rel) AS rels
+# }
+
+# WITH node, score, e1s, rel_ents, related_chunks, rels,
+#      ([node] + related_chunks) AS chunks
+
+# RETURN
+#   // node.text AS text,
+#   score     AS score,
+#   [e IN e1s | {name: coalesce(e.name, e.id, ''), labels: labels(e)}] AS direct_entities,
+#   [n IN related_chunks | n.text] AS related_chunk_texts,
+#   [e IN rel_ents | {name: coalesce(e.name, e.id, ''), labels: labels(e)}] AS related_entities,
+
+#   // optional: zusätzliches Feld (stört nicht)
+#   apoc.text.join([c IN chunks | coalesce(c.text,'')], '\n') +
+#   '\n' +
+#   apoc.text.join(
+#     [r IN rels |
+#       coalesce(startNode(r).name, startNode(r).id, '?') + ' - ' +
+#       type(r) + ' ' +
+#       coalesce(r.details, r.description, '') + ' -> ' +
+#       coalesce(endNode(r).name, endNode(r).id, '?')
+#     ],
+#     '\n'
+#   ) AS context_text
+
+# """
 
 LUCENE_SPECIAL = r'(\+|\-|\&\&|\|\||\!|\(|\)|\{|\}|\[|\]|\^|"|~|\*|\?|\:|\\|\/)'
 

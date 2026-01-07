@@ -6,21 +6,15 @@ from dotenv import load_dotenv, find_dotenv
 from neo4j import GraphDatabase
 from neo4j_graphrag.generation import RagTemplate
 from neo4j_graphrag.embeddings.openai import OpenAIEmbeddings
-from neo4j_graphrag.retrievers import VectorCypherRetriever, HybridCypherRetriever
+from neo4j_graphrag.retrievers import HybridCypherRetriever
 from neo4j_graphrag.llm import OpenAILLM
 from neo4j_graphrag.generation import GraphRAG
 from neo4j_graphrag.retrievers.base import Retriever
-
 from main.evaluation.logger import log_antwort
 from sentence_transformers import CrossEncoder
-
-# ---------------------------------------------------------------------------
-# 1) Konfiguration & Environment
-# ---------------------------------------------------------------------------
+import os
 
 load_dotenv(find_dotenv())
-
-import os
 
 URI = os.getenv("NEO4J_URI")
 AUTH_USER = os.getenv("NEO4J_USER")
@@ -28,8 +22,6 @@ AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "simplekg"
 
 SCRIPT_NAME = "SimpleKG_Hybrid_Community_Retriever_Rerank"
-from pathlib import Path
-import os
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
 
@@ -41,30 +33,24 @@ QUESTIONS_PATH = (
     / "golden_answers_dataset_short.jsonl"
 )
 
-# Neo4j-Driver
 driver = GraphDatabase.driver(URI, auth=(AUTH_USER, AUTH_PASSWORD))
 driver.verify_connectivity()
 
-# LLM (Answer Generation)
 llm = OpenAILLM(
     model_name=os.getenv("OPENAI_MODEL"),
 )
 
-# Embedder (Vector Search)
 embedder = OpenAIEmbeddings(model="text-embedding-3-small")
-
-# ---------------------------------------------------------------------------
-# 2) Retrieval query (used by VectorCypherRetriever internally)
-# ---------------------------------------------------------------------------
 
 retrieval_query = """
 WITH node AS node, score
+WHERE node:Chunk
+  AND node.text IS NOT NULL
+  AND trim(node.text) <> ""
 
-// 1) Entities direkt am Seed-Chunk (limitiert)
 OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e1:__Entity__)
 WITH node, score, collect(DISTINCT e1)[0..20] AS e1s
 
-// 2) Related chunks: Top N pro Seed nach shared-entity-count
 CALL {
   WITH e1s
   UNWIND e1s AS e
@@ -75,7 +61,6 @@ CALL {
   RETURN collect(DISTINCT c) AS related_chunks
 }
 
-
 CALL {
   WITH e1s
   UNWIND e1s AS e
@@ -83,8 +68,16 @@ CALL {
   RETURN collect(DISTINCT e2)[0..30] AS rel_ents
 }
 
-// 4) Beziehungen um die direkten Entities (1..2 Hops),
-//    aber OHNE :FROM_CHUNK und OHNE Chunk-Knoten im Pfad
+CALL {
+  WITH e1s
+  UNWIND e1s AS e
+  OPTIONAL MATCH (e)-[:IN_COMMUNITY]->(comm:__Community__)
+  WHERE comm.level = 1
+    AND comm.full_content IS NOT NULL
+    AND trim(comm.full_content) <> ""
+  RETURN collect(DISTINCT comm.full_content)[0..10] AS community_contents
+}
+
 CALL {
   WITH e1s
   UNWIND e1s AS e
@@ -96,20 +89,22 @@ CALL {
   RETURN collect(DISTINCT rel) AS rels
 }
 
-
-WITH node, score, e1s, rel_ents, related_chunks, rels,
-     ([node] + related_chunks) AS chunks
+WITH node, score, e1s, rel_ents, related_chunks, community_contents, rels, ([node] + related_chunks) AS chunks
 
 RETURN
-  // node.text AS text,
-  score     AS score,
+  score AS score,
+  coalesce(node.chunk_id, node.id, elementId(node)) AS chunk_id,
+  node.text AS text,
   [e IN e1s | {name: coalesce(e.name, e.id, ''), labels: labels(e)}] AS direct_entities,
-  [n IN related_chunks | n.text] AS related_chunk_texts,
+  [n IN related_chunks | coalesce(n.text,'')] AS related_chunk_texts,
   [e IN rel_ents | {name: coalesce(e.name, e.id, ''), labels: labels(e)}] AS related_entities,
-
-  // optional: zusätzliches Feld (stört nicht)
+  community_contents AS related_community_full_contents,
   apoc.text.join([c IN chunks | coalesce(c.text,'')], '\n') +
-  '\n' +
+  CASE WHEN size(community_contents) > 0 THEN
+    '\n\n[COMMUNITY]\n' + apoc.text.join([x IN community_contents | coalesce(x,'')], '\n---\n')
+  ELSE '' END
+  +
+  '\n\n[RELATIONS]\n' +
   apoc.text.join(
     [r IN rels |
       coalesce(startNode(r).name, startNode(r).id, '?') + ' - ' +
@@ -119,50 +114,13 @@ RETURN
     ],
     '\n'
   ) AS info
-
 """
-# retrieval_query = """
-# WITH node, score
-# WHERE node:Chunk
-#   AND node.text IS NOT NULL
-#   AND trim(node.text) <> ""
 
-# // Entities aus dem Chunk
-# OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e1)
-# WHERE e1.name IS NOT NULL
-#   AND trim(e1.name) <> ""
-
-# // Level-1 Communities zu diesen Entities
-# OPTIONAL MATCH (e1)-[:IN_COMMUNITY]->(comm:__Community__)
-# WHERE comm.level = 1
-#   AND comm.full_content IS NOT NULL
-#   AND trim(comm.full_content) <> ""
-
-# WITH
-#   node,
-#   score,
-#   collect(DISTINCT e1) AS direct_entities,
-#   collect(DISTINCT comm.full_content) AS related_community_full_contents
-
-# RETURN DISTINCT
-#   node.id   AS chunk_id,
-#   node.text AS text,
-#   score     AS score,
-
-#   // Entities: nur name + labels
-#   [e IN direct_entities |
-#     { name: e.name, labels: labels(e) }
-#   ] AS direct_entities,
-
-#   // Level-1 Communities (ungekürzt), begrenzt nur in der Anzahl
-#   related_community_full_contents[0..10] AS related_community_full_contents
-
-# """
 LUCENE_SPECIAL = r'(\+|\-|\&\&|\|\||\!|\(|\)|\{|\}|\[|\]|\^|"|~|\*|\?|\:|\\|\/)'
 
 def lucene_escape(s: str) -> str:
     s = re.sub(r"\s+", " ", s.strip())
-    s = re.sub(LUCENE_SPECIAL, r"\\\1", s)  
+    s = re.sub(LUCENE_SPECIAL, r"\\\1", s)
     return s
 
 retriever = HybridCypherRetriever(
@@ -176,14 +134,14 @@ retriever = HybridCypherRetriever(
 
 prompt_template = RagTemplate(
     template=(
-         "You are a technical support assistant for Arduino Products.\n"
-    "Use ONLY the provided context. Do not use outside knowledge.\n"
-    "If the context does not contain the answer, say exactly what information is missing.\n"
-    "Answer in complete sentences.\n"
-    "Answer as completely as possible.\n"
-    "Adapt the structure and style of the answer to the type of the question "
-    "(e.g., list items for 'which' questions, explain processes for 'how' questions, "
-    "and compare variants for 'difference' questions).\n\n"
+        "You are a technical support assistant for Arduino Products.\n"
+        "Use ONLY the provided context. Do not use outside knowledge.\n"
+        "If the context does not contain the answer, say exactly what information is missing.\n"
+        "Answer in complete sentences.\n"
+        "Answer as completely as possible.\n"
+        "Adapt the structure and style of the answer to the type of the question "
+        "(e.g., list items for 'which' questions, explain processes for 'how' questions, "
+        "and compare variants for 'difference' questions).\n\n"
         "Examples:\n"
         "{examples}\n\n"
         "Context:\n"
@@ -194,83 +152,53 @@ prompt_template = RagTemplate(
     )
 )
 
-# -------------------------------
-# RERANKING ADD-ON (BGE reranker)
-# -------------------------------
-
 reranker = CrossEncoder("BAAI/bge-reranker-base")
 
 class RerankingRetriever(Retriever):
     def __init__(self, base_retriever, reranker_model, multiplier: int = 4):
-        
         super().__init__(
             driver=base_retriever.driver,
             neo4j_database=base_retriever.neo4j_database
         )
-
         self.base = base_retriever
         self.reranker = reranker_model
         self.multiplier = multiplier
 
     def _rerank(self, raw_query: str, results: List[Dict[str, Any]], top_k: int):
-        candidates = [r for r in results if isinstance(r, dict) and r.get("info") or r.get("text")]
+        candidates = [r for r in results if isinstance(r, dict) and (r.get("info") or r.get("text"))]
         if not candidates:
             return results
-
-        pairs = [[raw_query, r["info"]] for r in candidates]
+        pairs = [[raw_query, str(r.get("info") or r.get("text") or "")] for r in candidates]
         scores = self.reranker.predict(pairs)
-
         for r, s in zip(candidates, scores):
             r["rerank_score"] = float(s)
-
         candidates.sort(key=lambda r: r["rerank_score"], reverse=True)
         return candidates[:top_k]
-    
+
     def search(self, query_text: str, top_k: int = 3, **kwargs):
-    
         raw_query = kwargs.pop("raw_query", query_text)
-
-        
         k = max(top_k * self.multiplier, top_k)
-
-    
         base_result = self.base.search(query_text=query_text, top_k=k, **kwargs)
-
-
         if isinstance(base_result, list):
-            items = base_result
-            return self._rerank(raw_query, items, top_k)
-
+            return self._rerank(raw_query, base_result, top_k)
         items = getattr(base_result, "items", None)
         if isinstance(items, list):
-            reranked = self._rerank(raw_query, items, top_k)
-            base_result.items = reranked
+            base_result.items = self._rerank(raw_query, items, top_k)
             return base_result
-
-    
         return base_result
-
 
     def retrieve(self, query_text: str, top_k: int = 3, **kwargs):
         raw_query = kwargs.pop("raw_query", query_text)
         k = max(top_k * self.multiplier, top_k)
-
         if hasattr(self.base, "retrieve"):
             res = self.base.retrieve(query_text=query_text, top_k=k, **kwargs)
         else:
             res = self.base.search(query_text=query_text, top_k=k, **kwargs)
-
         return self._rerank(raw_query, res, top_k) if isinstance(res, list) else res
-
 
 retriever = RerankingRetriever(retriever, reranker, multiplier=4)
 
-
-rag = GraphRAG(retriever=retriever, llm=llm,prompt_template=prompt_template)
-
-# ---------------------------------------------------------------------------
-# 3) Logging helper (context_items wird übergeben)
-# ---------------------------------------------------------------------------
+rag = GraphRAG(retriever=retriever, llm=llm, prompt_template=prompt_template)
 
 def safe_log(
     script: str,
@@ -281,7 +209,6 @@ def safe_log(
     gold_answer: str,
     context_items: Optional[List[Dict[str, Any]]] = None,
 ):
-
     log_antwort(
         script,
         question_id,
@@ -291,18 +218,8 @@ def safe_log(
         gold_answer or "",
         context_items=context_items,
     )
-# ---------------------------------------------------------------------------
-# 4) Context retrieval (LlamaIndex-style): call retriever directly
-# ---------------------------------------------------------------------------
 
 def retrieve_context_items(question: str, top_k: int = 3) -> List[Dict[str, Any]]:
-    """
-    Retrieve context directly from VectorCypherRetriever (not from GraphRAG response).
-    This is the reliable way to always have context for faithfulness evaluation.
-    """
-    results = None
-
-    # Try APIs across versions
     if hasattr(retriever, "retrieve"):
         try:
             results = retriever.retrieve(query_text=question, top_k=top_k)
@@ -314,92 +231,47 @@ def retrieve_context_items(question: str, top_k: int = 3) -> List[Dict[str, Any]
         except TypeError:
             results = retriever.search(question, top_k=top_k)
     else:
-        raise RuntimeError("VectorCypherRetriever has no retrieve/search method in this version.")
+        raise RuntimeError("Retriever has no search/retrieve method in this version.")
 
     context_items: List[Dict[str, Any]] = []
 
-
     if isinstance(results, list):
         for r in results:
-            if isinstance(r, dict):
-                text = str( r.get("info") or r.get("text") or "").strip()
-                if not text:
-                    continue
-
-                direct_entities = r.get("direct_entities", [])
-                related_entities = r.get("related_entities", [])
-                related_chunk_texts = r.get("related_chunk_texts", [])
-                score = r.get("score", "")
-
-                
-    
-                def fmt_entities(arr):
-                    out = []
-                    for e in arr or []:
-                        name = e.get("name", "")
-                        labels = e.get("labels", [])
-                        if name:
-                            out.append(f"{name} ({', '.join(labels)})")
-                    return out
-
-                meta_lines = []
-                if direct_entities:
-                    meta_lines.append(f"Direct entities: {fmt_entities(direct_entities)}")
-                if related_entities:
-                    meta_lines.append(f"Related entities: {fmt_entities(related_entities)}")
-                if related_chunk_texts:
-                    meta_lines.append(f"Related chunks count: {len(related_chunk_texts)}")
-
-
-
-                enriched_text = text
-                if meta_lines:
-                    enriched_text = text + "\n" + "\n".join(meta_lines)
-
-                context_items.append({
-    "content": enriched_text,
-    "source": "simplekg_vector_index",
-    "id": "",
-    "score": score,
-    "direct_entities": direct_entities,
-    "related_entities": related_entities,
-    "related_chunk_texts": related_chunk_texts,
-})
-
-            else:
+            if not isinstance(r, dict):
                 s = str(r).strip()
                 if s:
-                    context_items.append({"content": s, "source": "simplekg_vector_index", "id": "", "score": ""})
+                    context_items.append({"content": s, "source": "simplekg_retriever_raw", "id": "", "score": ""})
+                continue
 
-    else:
+            text = str(r.get("info") or r.get("text") or "").strip()
+            if not text:
+                continue
 
-        s = str(results).strip()
-        if s:
-            context_items.append({"content": s, "source": "simplekg_retriever_raw", "id": "", "score": ""})
+            context_items.append({
+                "content": text,
+                "source": "simplekg_hybrid_index",
+                "id": str(r.get("chunk_id") or ""),
+                "score": r.get("score", ""),
+                "direct_entities": r.get("direct_entities", []),
+                "related_entities": r.get("related_entities", []),
+                "related_chunk_texts": r.get("related_chunk_texts", []),
+                "related_community_full_contents": r.get("related_community_full_contents", []),
+            })
+        return context_items
 
+    s = str(results).strip()
+    if s:
+        context_items.append({"content": s, "source": "simplekg_retriever_raw", "id": "", "score": ""})
     return context_items
 
-# ---------------------------------------------------------------------------
-# 5) Answering: GraphRAG answer + Retriever context for logging
-# ---------------------------------------------------------------------------
-
 def answer_with_graphrag(question: str, top_k: int = 3) -> Tuple[str, List[Dict[str, Any]]]:
-    """
-    Returns (answer, context_items).
-    Answer from GraphRAG; context from retriever directly (reliable).
-    """
     safe_q = lucene_escape(question)
     response = rag.search(
         query_text=safe_q,
         retriever_config={"top_k": top_k},
-        # return_context=True  # optional, but we do NOT depend on it
     )
     answer = (getattr(response, "answer", None) or "").strip()
-
-
     context_items = retrieve_context_items(safe_q, top_k=top_k)
-
-
     if not context_items:
         context_items = [{
             "content": "[NO CONTEXT RETURNED BY RETRIEVER]",
@@ -407,12 +279,7 @@ def answer_with_graphrag(question: str, top_k: int = 3) -> Tuple[str, List[Dict[
             "id": "",
             "score": "",
         }]
-
     return answer, context_items
-
-# ---------------------------------------------------------------------------
-# 6) Batch mode (JSONL)
-# ---------------------------------------------------------------------------
 
 def run_batch_from_file(top_k: int = 3):
     print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
@@ -425,7 +292,6 @@ def run_batch_from_file(top_k: int = 3):
         for line_no, line in enumerate(f, start=1):
             if not line.strip():
                 continue
-
             try:
                 obj = json.loads(line)
             except Exception:
@@ -433,9 +299,9 @@ def run_batch_from_file(top_k: int = 3):
                 continue
 
             question_id = obj.get("id") or obj.get("question_id") or obj.get("query_id") or ""
-            question    = obj.get("question") or ""
+            question = obj.get("question") or ""
             gold_answer = obj.get("gold_answer") or ""
-            query_type  = obj.get("query_type") or ""
+            query_type = obj.get("query_type") or ""
 
             if not question:
                 continue
@@ -454,14 +320,10 @@ def run_batch_from_file(top_k: int = 3):
                 question,
                 answer,
                 gold_answer,
-                context_items=context_items,   #  pass context
+                context_items=context_items,
             )
 
     print("\n[INFO] Batch processing completed.\n")
-
-# ---------------------------------------------------------------------------
-# 7) Manual mode
-# ---------------------------------------------------------------------------
 
 def manual_question(top_k: int = 3):
     qid = input("Question ID (optional): ").strip() or ""
@@ -488,12 +350,8 @@ def manual_question(top_k: int = 3):
         context_items=context_items,
     )
 
-# ---------------------------------------------------------------------------
-# 8) Main loop
-# ---------------------------------------------------------------------------
-
 def main_loop(top_k: int = 3):
-    print("SimpleKG Pipeline (GraphRAG answer + Retriever context logging)")
+    print("SimpleKG Pipeline (Hybrid + Graph Expansion + Community + Rerank)")
     print("Type 'exit' to quit.\n")
 
     while True:
@@ -507,8 +365,6 @@ def main_loop(top_k: int = 3):
             run_batch_from_file(top_k=top_k)
         else:
             print("Please enter 'y', 'n', or 'exit'.\n")
-
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     try:

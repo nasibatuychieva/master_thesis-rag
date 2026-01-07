@@ -40,7 +40,7 @@ PROJECT_ROOT = _guess_project_root()
 
 # Default output: JSONL file (append)
 DEFAULT_LOGFILE = (
-    PROJECT_ROOT / "main" / "evaluation" / "results" / "new" / "answers_log_new_llmaindex_missing.jsonl"
+    PROJECT_ROOT / "main" / "evaluation" / "results" / "new" / "answers_log_new_llmgraph_reranker.jsonl"
 )
 
 # allow override
