@@ -59,31 +59,70 @@ embedder = OpenAIEmbeddings(model="text-embedding-3-small")
 # ---------------------------------------------------------------------------
 
 retrieval_query = """
-WITH node, score
+WITH node AS node, score
 
-// 1) Entities direkt am Seed-Chunk
+// 1) Entities direkt am Seed-Chunk (limitiert)
 OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e1:__Entity__)
+WITH node, score, collect(DISTINCT e1)[0..20] AS e1s
 
-// 2) Weitere Chunks zu diesen Entities
-OPTIONAL MATCH (e1)-[:FROM_CHUNK]->(node2:Chunk)
+// 2) Related chunks: Top N pro Seed nach shared-entity-count
+CALL {
+  WITH e1s
+  UNWIND e1s AS e
+  MATCH (e)-[:FROM_CHUNK]->(c:Chunk)
+  WITH c, count(DISTINCT e) AS evidence
+  ORDER BY evidence DESC
+  LIMIT 10
+  RETURN collect(DISTINCT c) AS related_chunks
+}
 
-// 3) Weitere Entities, die direkt mit e1 verbunden sind
-OPTIONAL MATCH (e1)--(e2:__Entity__)
 
-// Sammeln
-WITH
-  node, score,
-  collect(DISTINCT e1)    AS direct_entities,
-  collect(DISTINCT node2) AS related_chunks,
-  collect(DISTINCT e2)    AS related_entities
+CALL {
+  WITH e1s
+  UNWIND e1s AS e
+  MATCH (e)--(e2:__Entity__)
+  RETURN collect(DISTINCT e2)[0..30] AS rel_ents
+}
+
+// 4) Beziehungen um die direkten Entities (1..2 Hops),
+
+CALL {
+  WITH e1s
+  UNWIND e1s AS e
+  MATCH p = (e)-[rs*1..2]-(nb)
+  WHERE nb:__Entity__
+    AND ALL(r IN rs WHERE type(r) <> 'FROM_CHUNK')
+    AND ALL(n IN nodes(p) WHERE n:__Entity__)
+  UNWIND relationships(p) AS rel
+  RETURN collect(DISTINCT rel) AS rels
+}
+
+
+WITH node, score, e1s, rel_ents, related_chunks, rels,
+     ([node] + related_chunks) AS chunks
 
 RETURN
-  node.text AS text,
+  // node.text AS text,
   score     AS score,
-  [e IN direct_entities | {name: e.name, labels: labels(e)}] AS direct_entities,
-  [n IN related_chunks  | n.text] AS related_chunk_texts,
-  [e IN related_entities | {name: e.name, labels: labels(e)}] AS related_entities
+  [e IN e1s | {name: coalesce(e.name, e.id, ''), labels: labels(e)}] AS direct_entities,
+  [n IN related_chunks | n.text] AS related_chunk_texts,
+  [e IN rel_ents | {name: coalesce(e.name, e.id, ''), labels: labels(e)}] AS related_entities,
+
+  // optional: zusätzliches Feld (stört nicht)
+  apoc.text.join([c IN chunks | coalesce(c.text,'')], '\n') +
+  '\n' +
+  apoc.text.join(
+    [r IN rels |
+      coalesce(startNode(r).name, startNode(r).id, '?') + ' - ' +
+      type(r) + ' ' +
+      coalesce(r.details, r.description, '') + ' -> ' +
+      coalesce(endNode(r).name, endNode(r).id, '?')
+    ],
+    '\n'
+  ) AS context_text
+
 """
+
 
 retriever = VectorCypherRetriever(
     driver,
@@ -144,7 +183,7 @@ def safe_log(
 # 4) Context retrieval: call retriever directly
 # ---------------------------------------------------------------------------
 
-def retrieve_context_items(question: str, top_k: int = 20) -> List[Dict[str, Any]]:
+def retrieve_context_items(question: str, top_k: int = 3) -> List[Dict[str, Any]]:
     """
     Retrieve context directly from VectorCypherRetriever (not from GraphRAG response).
     We log ONLY the chunk text (node.text) as content.
@@ -172,7 +211,7 @@ def retrieve_context_items(question: str, top_k: int = 20) -> List[Dict[str, Any
         for r in results:
             if isinstance(r, dict):
                 # ✅ ONLY chunk text
-                text = str(r.get("text") or "").strip()
+                text = str(r.get("context_text") or r.get("text") or "").strip()
                 if not text:
                     continue
 
@@ -200,7 +239,7 @@ def retrieve_context_items(question: str, top_k: int = 20) -> List[Dict[str, Any
 # 5) Answering: GraphRAG answer + Retriever context for logging
 # ---------------------------------------------------------------------------
 
-def answer_with_graphrag(question: str, top_k: int = 20) -> Tuple[str, List[Dict[str, Any]]]:
+def answer_with_graphrag(question: str, top_k: int = 3) -> Tuple[str, List[Dict[str, Any]]]:
     """
     Returns (answer, context_items).
     Answer from GraphRAG; context from retriever directly (reliable).
@@ -228,7 +267,7 @@ def answer_with_graphrag(question: str, top_k: int = 20) -> Tuple[str, List[Dict
 # 6) Batch mode (JSONL)
 # ---------------------------------------------------------------------------
 
-def run_batch_from_file(top_k: int = 20):
+def run_batch_from_file(top_k: int = 3):
     print(f"\n[INFO] Loading dataset from {QUESTIONS_PATH}\n")
 
     if not QUESTIONS_PATH.exists():
@@ -277,7 +316,7 @@ def run_batch_from_file(top_k: int = 20):
 # 7) Manual mode
 # ---------------------------------------------------------------------------
 
-def manual_question(top_k: int = 20):
+def manual_question(top_k: int = 3):
     qid = input("Question ID (optional): ").strip() or ""
     qtype = input("Query type (optional, e.g., factual/relational/summary): ").strip() or "manual"
     question = input("Question: ").strip()
@@ -306,7 +345,7 @@ def manual_question(top_k: int = 20):
 # 8) Main loop
 # ---------------------------------------------------------------------------
 
-def main_loop(top_k: int = 20):
+def main_loop(top_k: int = 3):
     print("SimpleKG Pipeline (GraphRAG answer + Retriever context logging)")
     print("Type 'exit' to quit.\n")
 

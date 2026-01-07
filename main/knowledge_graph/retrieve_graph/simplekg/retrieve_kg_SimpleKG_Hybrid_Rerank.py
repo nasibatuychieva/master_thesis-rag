@@ -38,7 +38,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "evaluation_datasets"
-    / "golden_answers_dataset_filtered.jsonl"
+    / "golden_answers_dataset_filtered_summary.jsonl"
 )
 
 # Neo4j-Driver
@@ -74,7 +74,7 @@ CALL {
   RETURN collect(DISTINCT c) AS related_chunks
 }
 
-// 3) Related entities (für dein Logging-Format)
+// 3) Related entities 
 CALL {
   WITH e1s
   UNWIND e1s AS e
@@ -93,7 +93,7 @@ CALL {
   RETURN collect(DISTINCT rel) AS rels
 }
 
-// 5) Ausgabe: kompatibel zu deinem Code + optional "info"
+
 WITH node, score, e1s, rel_ents, related_chunks, rels,
      ([node] + related_chunks) AS chunks
 
@@ -115,7 +115,7 @@ RETURN
       coalesce(endNode(r).name, endNode(r).id, '?')
     ],
     '\n'
-  ) AS info
+  ) AS context_text
 """
 
 
@@ -212,13 +212,13 @@ class RerankingRetriever(Retriever):
     def _rerank(self, raw_query: str, results: List[Dict[str, Any]], top_k: int):
         candidates = [
         r for r in results
-        if isinstance(r, dict) and (r.get("info") or r.get("text"))
+        if isinstance(r, dict) and (r.get("context_text") or r.get("text"))
         ]
 
         if not candidates:
             return results
 
-        pairs = [[raw_query, r["info"]] for r in candidates]
+        pairs = [[raw_query, r["context_text"]] for r in candidates]
         scores = self.reranker.predict(pairs)
 
         for r, s in zip(candidates, scores):
@@ -324,7 +324,7 @@ def retrieve_context_items(question: str, top_k: int = 3) -> List[Dict[str, Any]
     if isinstance(results, list):
         for r in results:
             if isinstance(r, dict):
-                text = str(r.get("info") or r.get("text") or "").strip()
+                text = str(r.get("context_text") or r.get("text") or "").strip()
                 if not text:
                     continue
 

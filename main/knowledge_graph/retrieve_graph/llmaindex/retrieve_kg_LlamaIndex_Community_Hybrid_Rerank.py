@@ -77,12 +77,13 @@ PRODUCT_PROP = "product"
 PRODCAT_PROP = "product_category"
 
 # How many chunks to load for BM25 + Vector (RAM!)
-CHUNK_LOAD_LIMIT = 80_000
+CHUNK_LOAD_LIMIT = 10_000   # oder 5_000 fürs erste
+BM25_TOP_K = 10
+VECTOR_TOP_K = 10
+ENSEMBLE_TOP_K = 30
+FINAL_CONTEXT_K = 10
 
-# Retrieval sizes
-BM25_TOP_K = 5
-VECTOR_TOP_K = 5
-PG_TOP_K = 5
+PG_TOP_K = 3
 
 # --- Community retrieval (NEW) ---
 # We query communities via FULLTEXT, then expand to chunks via:

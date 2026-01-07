@@ -72,7 +72,7 @@ CALL {
   RETURN collect(DISTINCT c) AS related_chunks
 }
 
-// 3) Related entities (für dein Logging-Format)
+
 CALL {
   WITH e1s
   UNWIND e1s AS e
@@ -93,7 +93,6 @@ CALL {
   RETURN collect(DISTINCT rel) AS rels
 }
 
-// 5) Ausgabe: kompatibel zu deinem Code + optional "info"
 WITH node, score, e1s, rel_ents, related_chunks, rels,
      ([node] + related_chunks) AS chunks
 
@@ -115,39 +114,10 @@ RETURN
       coalesce(endNode(r).name, endNode(r).id, '?')
     ],
     '\n'
-  ) AS info
-
+  ) AS context_text
 
 """
 
-# retrieval_query = """
-
-# WITH node, score
-
-# // 1) Entities direkt am Seed-Chunk
-# OPTIONAL MATCH (node)<-[:FROM_CHUNK]-(e1:__Entity__)
-
-# // 2) Weitere Chunks zu diesen Entities
-# OPTIONAL MATCH (e1)-[:FROM_CHUNK]->(node2:Chunk)
-
-# // 3) Weitere Entities, die direkt mit e1 verbunden sind
-# OPTIONAL MATCH (e1)--(e2:__Entity__)
-
-# // Sammeln
-# WITH
-#   node, score,
-#   collect(DISTINCT e1)    AS direct_entities,
-#   collect(DISTINCT node2) AS related_chunks,
-#   collect(DISTINCT e2)    AS related_entities
-
-# RETURN
-#   node.text AS text,
-#   score     AS score,
-#   [e IN direct_entities | {name: e.name, labels: labels(e)}] AS direct_entities,
-#   [n IN related_chunks  | n.text] AS related_chunk_texts,
-#   [e IN related_entities | {name: e.name, labels: labels(e)}] AS related_entities
-
-# """
 LUCENE_SPECIAL = r'(\+|\-|\&\&|\|\||\!|\(|\)|\{|\}|\[|\]|\^|"|~|\*|\?|\:|\\|\/)'
 
 def lucene_escape(s: str) -> str:
@@ -241,7 +211,7 @@ def retrieve_context_items(question: str,  top_k: int = 3) -> List[Dict[str, Any
     if isinstance(results, list):
         for r in results:
             if isinstance(r, dict):
-                text = str(r.get("info") or r.get("text") or "").strip()
+                text = str(r.get("context_text") or r.get("text") or "").strip()
                 if not text:
                     continue
 

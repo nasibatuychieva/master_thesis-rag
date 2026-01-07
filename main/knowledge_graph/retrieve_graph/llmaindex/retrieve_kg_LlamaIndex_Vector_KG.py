@@ -27,7 +27,7 @@ username = os.getenv("NEO4J_USER")
 password =os.getenv("NEO4J_PASSWORD")
 uri = os.getenv("NEO4J_URI")
 database=  "llmakg"
-SCRIPT_NAME = "LlamaIndex_Vector_KG_Retriever"
+SCRIPT_NAME = "LlamaIndex_Dense_KG"
 
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
@@ -37,7 +37,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "evaluation_datasets"
-    / "golden_answers_dataset.jsonl"
+    / "golden_answers_dataset_filtered.jsonl"
 )
 
 # ---------------------------------------------------------------------------
@@ -64,11 +64,12 @@ index = PropertyGraphIndex.from_existing(
 vector_retriever = VectorContextRetriever(
     graph_store=index.property_graph_store,
     embed_model=embed_model,
-    similarity_top_k=10,
+    similarity_top_k=30,
 )
 
 synonym_retriever = LLMSynonymRetriever(
     graph_store=index.property_graph_store,
+    max_keywords=20,
     llm=llm,
 )
 

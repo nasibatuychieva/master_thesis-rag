@@ -55,7 +55,7 @@ AUTH_USER = os.getenv("NEO4J_USER")
 AUTH_PASSWORD = os.getenv("NEO4J_PASSWORD")
 DATABASE = "llmakg"
 
-SCRIPT_NAME = "LlamaIndex_BM25_Hybrid_Retriever_Rerank"
+SCRIPT_NAME = "LlamaIndex_Hybrid_Rerank"
 from pathlib import Path
 import os
 
@@ -66,7 +66,7 @@ QUESTIONS_PATH = (
     / "main"
     / "evaluation"
     / "evaluation_datasets"
-    / "golden_answers_dataset_questions_missing.jsonl"
+    / "golden_answers_dataset_filtered.jsonl"
 )
 
 # Chunk schema
@@ -92,11 +92,13 @@ FINAL_CONTEXT_K = 12        # what to pass to prompt & log
 # Weights (optional)
 W_BM25 = 1.0
 W_VECTOR = 1.0
-W_PG = 1.2  # give KG a slight boost
+W_PG = 1.0
+
+
 
 # Rerank (local)
 USE_RERANK = True
-RERANK_TOP_N = 12
+RERANK_TOP_N = 6
 RERANK_MODEL = "BAAI/bge-reranker-base"  # pip install sentence-transformers
 
 # LLM + Embeddings
