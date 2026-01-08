@@ -15,7 +15,7 @@ from langchain_experimental.graph_transformers.llm import LLMGraphTransformer
 from langchain_community.graphs.graph_document import Node, Relationship
 
 # ------------------------------------------------------------------
-# Neo4j-Verbindung
+# Neo4j-Connection
 # ------------------------------------------------------------------
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
@@ -75,7 +75,7 @@ BASE_DIR_PATH = (
 
 BASE_DIR  =  Path(os.getenv("ANSWERS_LOG_PATH", str(BASE_DIR_PATH))).expanduser().resolve()
 # ------------------------------------------------------------------
-# 1) Chunks aus JSONL laden -> LangChain-Documents
+# 1) Load Chunks 
 # ------------------------------------------------------------------
 def load_chunks_from_jsonl(base_dir: Path) -> List[Document]:
     docs: List[Document] = []
@@ -117,7 +117,7 @@ def load_chunks_from_jsonl(base_dir: Path) -> List[Document]:
     return docs
 
 # ------------------------------------------------------------------
-# 2) Aus Texten GraphDocuments extrahieren
+# 2) Create GraphDocuments from text chunks
 # ------------------------------------------------------------------
 def extract_graph_documents(docs: List[Document]):
     graph_docs = doc_transformer.convert_to_graph_documents(docs)
@@ -125,7 +125,7 @@ def extract_graph_documents(docs: List[Document]):
     return graph_docs
 
 # ------------------------------------------------------------------
-# 3) GraphDocuments nach Neo4j schreiben
+# 3) GraphDocuments to Neo4j
 # ------------------------------------------------------------------
 def write_graph_to_neo4j(graph_docs):
     for gd in graph_docs:
@@ -137,9 +137,7 @@ def write_graph_to_neo4j(graph_docs):
         doc_id = (meta.get("file_name") or "UNKNOWN_DOCUMENT").strip()
         chunk_id = (meta.get("chunk_id") or "UNKNOWN_CHUNK").strip()
 
-        # -------------------------
-        # NEU: Document-Knoten
-        # -------------------------
+
         graph.query(
             """
             MERGE (d:Document {id: $doc_id})
@@ -149,9 +147,7 @@ def write_graph_to_neo4j(graph_docs):
             {"doc_id": doc_id},
         )
 
-        # -------------------------
-        # NEU: Chunk-Knoten
-        # -------------------------
+
         graph.query(
             """
             MERGE (c:Chunk {id: $chunk_id})

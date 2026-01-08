@@ -1,5 +1,5 @@
 """
-LLM-as-a-Judge metrics for technical QA (Arduino-style) with DEBUG LOGGING.
+LLM-as-a-Judge metrics.
 
 FULL VERSION (all metrics):
 - Answer Relevance
@@ -8,20 +8,10 @@ FULL VERSION (all metrics):
 - Faithfulness (improved for long contexts + list answers)
 - Helpfulness (utility-style rating 1–5 + faithfulness-gated final)
 
-MILD + POSITIVE CONTEXT BIAS (this version):
-- Faithfulness is made "positive-evidence biased":
-  - "No" is used ONLY when context contradicts a claim or strongly implies it is false.
-  - For long/truncated contexts, prefer "Partial" when plausible.
-  - Optional Anchor-Focus: filter context to chunks that mention answer anchors (product names / key terms),
-    reducing false "No" due to truncation/noise.
-- Keeps internal scores in [0,1], plus 1–5 mapped scores.
-- Correctness outputs coverage + coverage_1to5.
-
 INPUT FORMAT:
 - Reads from a JSONL file (one JSON object per line) with keys:
   script, question_id, query_type, question, answer, gold_answer, context_items [...]
 
-Run as a single .py file.
 """
 
 from __future__ import annotations

@@ -13,7 +13,7 @@ from neo4j_graphrag.experimental.pipeline.kg_builder import SimpleKGPipeline
 from neo4j_graphrag.experimental.components.schema import SchemaFromTextExtractor
 
 # ---------------------------------------------------------------------------
-# 1) Konfiguration & Environment
+# 1) Config & Environment
 # ---------------------------------------------------------------------------
 
 load_dotenv(find_dotenv())

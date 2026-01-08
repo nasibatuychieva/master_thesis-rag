@@ -10,7 +10,7 @@ from llama_index.llms.openai import OpenAI
 from llama_index.core.indices.property_graph import SimpleLLMPathExtractor
 from llama_index.graph_stores.neo4j import Neo4jPGStore
 
-# ENV laden
+# ENV load
 load_dotenv(find_dotenv())
 
 # Embedder & LLM
